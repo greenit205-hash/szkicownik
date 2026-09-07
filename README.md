@@ -26,7 +26,9 @@ sam dociąga się tak, żeby długości na ekranie odpowiadały zmierzonym. Ści
 rysowane pod kątem prostym takie zostają, a ściany niemierzone wynikają
 z zamknięcia figury. Przełącznik da się wyłączyć, jest też ręczne ⟳ Dopasuj.
 
-**Przeszkody (⬛).** Komin, słup, szacht, zabudowa, schody. Przeciągnięcie
+**Przeszkody (⬛).** W siedmiu kolorach — komin, szacht, opaska i taras na jednym
+rysunku przestają się zlewać. Kolor trafia też do tabel i na wydruk.
+ Komin, słup, szacht, zabudowa, schody. Przeciągnięcie
 palcem daje prostokąt, kliknięcie wewnątrz obszaru domkniętego ścianami
 wypełnia cały obrys. Wymiary podaje się w centymetrach i wtedy rysunek jest
 w skali. Można zaznaczyć, że przeszkoda ma być odejmowana od powierzchni.
@@ -63,6 +65,22 @@ Wpisane pomiary jadą razem z rysunkiem.
 pośredniego, duplikowanie i usuwanie. Projekty siedzą w IndexedDB, więc limit
 5 MB z localStorage już nie obowiązuje. Projekt zapisany starszą wersją
 przenosi się sam przy pierwszym uruchomieniu.
+
+**Zdjęcia z opisem (🖼️).** Osobny rodzaj szkicu: w tle leży zdjęcie, a wszystkie
+narzędzia opisowe — 📐 Miarka, ✏️ Ołówek, 🔤 Txt, 💬 Komentarz, ▨ Kreskowanie —
+działają na nim tak samo jak na rysunku. Zdjęcia są przy wgrywaniu zmniejszane
+do 1600 px i zapisywane jako JPEG, żeby plik projektu nadawał się do wysłania.
+Można wgrać kilka naraz; każde trafia na własną zakładkę.
+
+Opcjonalna **kalibracja**: rysujesz Miarką odcinek na czymś, czego długość znasz
+(framuga, płyta, rozłożona miarka), podajesz ile ma metrów — i kolejne miarki
+dostają podpowiedź długości. Podpowiedź, nie wpis: skala jest wiarygodna tylko
+w płaszczyźnie odcinka odniesienia, perspektywa zafałszuje wszystko, co leży
+bliżej albo dalej od aparatu.
+
+Na zdjęciu nie ma ścian, pomieszczeń, otworów, powierzchni ani kontroli pomiarów
+— te narzędzia są wygaszone. Zdjęcie nie jest rzutem i nie wchodzi do bilansu
+metrażu.
 
 **Wydruk (🖨️).** Strony A4 poziomo, po jednej na szkic: tabelka z nazwą projektu
 i datą, rysunek, podziałka metrowa oraz tabele pomieszczeń, otworów i przeszkód.
@@ -120,6 +138,8 @@ działa kod, który trafia na urządzenie.
 | `test-korekty.js` | poprawianie tego, co już wstawione, bez cofania całej pracy |
 | `test-grubosc.js` | grubość ścian i zapis/odczyt projektu |
 | `test-kontrola.js` | zakresy, sprzeczności i braki w pomiarach |
+| `test-opisy.js` | czytelność podpisów, granice eksportu, kolory przeszkód |
+| `test-zdjecia.js` | zdjęcia, kalibracja, wyłączenie narzędzi rysunkowych |
 | `test-skala.js` | dopasowanie rysunku do wymiarów, przeszkody, tabela przeszkód, powierzchnia w świetle |
 | `test-projekty.js` | magazyn projektów (obie drogi), wydruk, warstwy, odbicie i obrót, ciągi |
 | `mutacje.py` | czy testy w ogóle coś łapią — psuje kod celowo i sprawdza reakcję |
@@ -201,6 +221,8 @@ FIT_DOKLADNOSC = 0.25      // px - poniżej tego uznajemy, że rysunek pasuje
 CHAIN_ODSTEP = 46          // px - odsunięcie pierwszej linii wymiarowej od obrysu
 CHAIN_POZIOM = 30          // px - odstęp między kolejnymi poziomami ciągu
 MAX_THICKNESS_CM = 200     // grubość ściany ponad to traktujemy jak pomyłkę
+FOTO_MAX_PX = 1600         // dłuższy bok zdjęcia po zmniejszeniu
+FOTO_JAKOSC = 0.75         // kompresja JPEG przy wgrywaniu
 ```
 
 Kontrola pomiarów: tolerancja porównań 2 cm, ściana 0,3–30 m, wysokość
@@ -212,8 +234,9 @@ kondygnacji 1,8–5 m, otwory 30–400 cm.
 
 ```js
 sketches = [{
-  id, name, kind: 'rzut'|'przekroj'|'skosy', height: '2.60',
+  id, name, kind: 'rzut'|'przekroj'|'skosy'|'zdjecie', height: '2.60',
   panX, panY, zoomLevel, showDimensions,
+  photo: { src, w, h, opis, skalaPxNaM },          // tylko przy kind: 'zdjecie'
   objects: {
     lines:     [{x1, y1, x2, y2, gr}],           // gr w cm, brak = cienka linia
     rooms:     [{id, num, name, polygon, area, centroid, _spans}],

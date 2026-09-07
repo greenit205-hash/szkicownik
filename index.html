@@ -62,6 +62,8 @@
     <button type="button" class="btn btn-sm btn-outline-dark fw-bold" onclick="openProjectsDialog()">🗂️ Projekty</button>
     <button type="button" class="btn btn-sm btn-outline-dark fw-bold" onclick="saveProjectFile()">💾 Zapisz plik (JSON)</button>
     <button type="button" class="btn btn-sm btn-outline-dark fw-bold" onclick="document.getElementById('projectFileInput').click()">📂 Wczytaj plik</button>
+    <button type="button" class="btn btn-sm btn-outline-primary fw-bold" onclick="addPhotoSketch()">🖼️ Zdjęcie</button>
+    <input type="file" id="photoFileInput" accept="image/*" multiple style="display:none" onchange="handlePhotoFiles(this)">
     <button type="button" class="btn btn-sm btn-primary fw-bold" onclick="exportPng()">🖼️ Pobierz PNG</button>
     <button type="button" class="btn btn-sm btn-outline-primary fw-bold" onclick="printProject()">🖨️ Drukuj</button>
     <button type="button" class="btn btn-sm btn-outline-secondary fw-bold" onclick="openLayersDialog()">🧱 Warstwy</button>
@@ -86,6 +88,7 @@
             <option value="rzut">Rzut</option>
             <option value="przekroj">Przekrój / elewacja</option>
             <option value="skosy">Przekrój poddasza (skosy)</option>
+            <option value="zdjecie">Zdjęcie z opisem</option>
           </select>
         </span>
         <span class="ms-2 d-inline-flex align-items-center gap-1" id="sketchHeightWrap">
@@ -97,6 +100,7 @@
         </select>
       </div>
       <p class="text-muted small mb-2 d-none d-md-block"><strong>Wskazówka:</strong> rysunek jest tylko szkicem — liczą się wyłącznie wpisane wymiary (<strong>✍️ Wymiaruj</strong>). Ściany rysuje się narzędziem <strong>📏 Ściana</strong>; pole <strong>Grubość</strong> obok decyduje, czy ściana będzie cienką linią (0), czy zakreskowanym pasem, a <strong>Pas</strong> — po której stronie rysowanej linii ten mur leży. Wymiary i powierzchnie liczą się zawsze po linii, którą rysujesz. Przy włączonej <strong>📐 Skali 1:1</strong> rysunek sam dociąga się do wpisanych wymiarów, więc odległości na ekranie odpowiadają rzeczywistym.</p>
+      <div id="photoBar" style="display:none"></div>
       <div id="canvasWrapper" class="flex-grow-1 d-flex flex-column">
         <div class="d-flex flex-wrap gap-2 mb-2 bg-light p-2 border rounded align-items-center">
           <div class="btn-group flex-wrap shadow-sm">
@@ -549,6 +553,8 @@
         <input type="number" min="1" step="1" inputmode="numeric" id="obstacleD" class="form-control form-control-sm" placeholder="głębokość">
       </div>
     </div>
+    <label class="small fw-bold text-muted mb-1">Kolor</label>
+    <select id="obstacleColor" class="form-select form-select-sm mb-2" onchange="onObstacleColorChange()"></select>
     <div class="form-check mb-2">
       <input class="form-check-input" type="checkbox" id="obstacleSubtract" checked>
       <label class="form-check-label small fw-bold" for="obstacleSubtract">Odejmij od powierzchni pomieszczenia</label>
@@ -1194,6 +1200,38 @@
 
   const OBSTACLE_HATCH_STEP = 8;
 
+  // Kolory przeszkod. Jeden rysunek potrafi miec komin, szacht, planowana opaske
+  // i taras naraz - bez rozroznienia kolorem robi sie z tego jedna szara plama.
+  // Domyslny zostaje szary, zeby stare szkice wygladaly jak dotad.
+  const OBSTACLE_COLORS = [
+    { id: 'szary',      nazwa: 'Szary',      hex: '#6c757d' },
+    { id: 'czerwony',   nazwa: 'Czerwony',   hex: '#b02a37' },
+    { id: 'niebieski',  nazwa: 'Niebieski',  hex: '#0d6efd' },
+    { id: 'zielony',    nazwa: 'Zielony',    hex: '#198754' },
+    { id: 'pomaranczowy', nazwa: 'Pomarańczowy', hex: '#c65102' },
+    { id: 'fioletowy',  nazwa: 'Fioletowy',  hex: '#6f42c1' },
+    { id: 'brazowy',    nazwa: 'Brązowy',    hex: '#8b5a2b' }
+  ];
+
+  function obstacleColorHex(o) {
+    const wpis = OBSTACLE_COLORS.find(c => c.id === (o && o.kolor));
+    if (wpis) return wpis.hex;
+    // brak koloru = zachowanie sprzed tej zmiany: czerwony gdy odejmowana, szary gdy nie
+    return (o && o.subtract) ? '#b02a37' : '#6c757d';
+  }
+
+  function obstacleColorName(o) {
+    const wpis = OBSTACLE_COLORS.find(c => c.id === (o && o.kolor));
+    return wpis ? wpis.nazwa : '—';
+  }
+
+  // Ten sam kolor w wersji przezroczystej - do kreskowania wnetrza.
+  function rgba(hex, alfa) {
+    const h = String(hex).replace('#', '');
+    const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+    return 'rgba(' + r + ',' + g + ',' + b + ',' + alfa + ')';
+  }
+
   function ensureObstacles() {
     if (!objects.obstacles) objects.obstacles = [];
     return objects.obstacles;
@@ -1252,7 +1290,8 @@
       ctx.fill();
       ctx.clip();
       // kreskowanie w drugą stronę niż ściany (\ zamiast /)
-      ctx.strokeStyle = o.subtract ? 'rgba(176,42,55,0.75)' : 'rgba(108,117,125,0.75)';
+      const kolor = obstacleColorHex(o);
+      ctx.strokeStyle = rgba(kolor, 0.75);
       ctx.lineWidth = 1.2;
       ctx.beginPath();
       const span = maxY - minY;
@@ -1268,7 +1307,7 @@
       ctx.moveTo(p[0].x, p[0].y);
       for (let i = 1; i < p.length; i++) ctx.lineTo(p[i].x, p[i].y);
       ctx.closePath();
-      ctx.strokeStyle = o.subtract ? '#b02a37' : '#495057';
+      ctx.strokeStyle = kolor;
       ctx.lineWidth = 2;
       ctx.lineJoin = 'round';
       ctx.stroke();
@@ -1282,7 +1321,7 @@
         const w = ctx.measureText(o.label).width + 10;
         ctx.fillStyle = 'rgba(255,255,255,0.9)';
         ctx.fillRect(c.x - w / 2, c.y - 10, w, 20);
-        ctx.fillStyle = o.subtract ? '#b02a37' : '#343a40';
+        ctx.fillStyle = kolor;
         ctx.fillText(o.label, c.x, c.y);
         ctx.restore();
       }
@@ -1291,6 +1330,7 @@
 
   // --- okno dialogowe ---
   let editingObstacleIndex = -1;
+  let lastObstacleColor = 'szary';
   let pendingObstacle = null;      // { polygon } albo { cx, cy } dla prostokąta
 
   function openObstacleDialog(dane, editIndex) {
@@ -1301,6 +1341,18 @@
     document.getElementById('obstacleW').value = o && o.w ? o.w : '';
     document.getElementById('obstacleD').value = o && o.d ? o.d : '';
     document.getElementById('obstacleSubtract').checked = o ? !!o.subtract : true;
+    const sel = document.getElementById('obstacleColor');
+    if (sel) {
+      if (!sel.options.length) {
+        OBSTACLE_COLORS.forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = c.id; opt.text = c.nazwa;
+          sel.appendChild(opt);
+        });
+      }
+      sel.value = (o && o.kolor) ? o.kolor : lastObstacleColor;
+      sel.style.borderLeft = '10px solid ' + obstacleColorHex({ kolor: sel.value });
+    }
     const wymiary = document.getElementById('obstacleSizeBox');
     // wymiary podaje się tylko przy prostokącie; przy wypełnionym obrysie
     // kształt jest już ustalony przez ściany
@@ -1319,10 +1371,17 @@
     renderCanvas();
   }
 
-  function setObstaclePreset(nazwa, w, d) {
+  function setObstaclePreset(nazwa, w, d, kolor) {
     document.getElementById('obstacleLabel').value = nazwa;
     if (w) document.getElementById('obstacleW').value = w;
     if (d) document.getElementById('obstacleD').value = d;
+    const sel = document.getElementById('obstacleColor');
+    if (sel && kolor) { sel.value = kolor; onObstacleColorChange(); }
+  }
+
+  function onObstacleColorChange() {
+    const sel = document.getElementById('obstacleColor');
+    if (sel) sel.style.borderLeft = '10px solid ' + obstacleColorHex({ kolor: sel.value });
   }
 
   function saveObstacle() {
@@ -1330,11 +1389,14 @@
     const w = parseFloat(document.getElementById('obstacleW').value);
     const d = parseFloat(document.getElementById('obstacleD').value);
     const subtract = document.getElementById('obstacleSubtract').checked;
+    const selK = document.getElementById('obstacleColor');
+    const kolor = (selK && OBSTACLE_COLORS.some(c => c.id === selK.value)) ? selK.value : 'szary';
+    lastObstacleColor = kolor;
     const lista = ensureObstacles();
 
     if (editingObstacleIndex >= 0) {
       const o = lista[editingObstacleIndex];
-      o.label = label; o.subtract = subtract;
+      o.label = label; o.subtract = subtract; o.kolor = kolor;
       if (isFinite(w) && w > 0 && isFinite(d) && d > 0) {
         const c = obstacleCenter(o);
         o.w = w; o.d = d;
@@ -1351,7 +1413,7 @@
       }
       if (!polygon || polygon.length < 3) { closeObstacleDialog(); return; }
       lista.push({ id: Date.now(), polygon: polygon, label: label,
-                   subtract: subtract, w: ww, d: dd });
+                   subtract: subtract, kolor: kolor, w: ww, d: dd });
     }
     closeObstacleDialog();
     recalculateRooms(); saveStateToHistory(); renderCanvas();
@@ -1476,6 +1538,275 @@
   function editObstacleFromTable(sketchIndex, obstacleIndex) {
     if (sketchIndex !== currentSketchIndex) switchSketch(sketchIndex);
     openObstacleDialog(null, obstacleIndex);
+  }
+
+  // ================= ZDJĘCIA =================
+  //
+  // Osobny rodzaj szkicu: zamiast pustej kratki w tle leży zdjęcie, a wszystkie
+  // narzędzia opisowe - 📐 Miarka, ✏️ Ołówek, 🔤 Txt, 💬 Komentarz, ▨ Kreskowanie -
+  // działają na nim tak samo jak na rysunku. Dzięki temu nie ma tu ani jednej
+  // nowej linijki kodu do opisywania; jest tylko tło i skala.
+  //
+  // Czego na zdjęciu NIE MA: ścian, pomieszczeń, otworów, powierzchni i kontroli
+  // pomiarów. Zdjęcie nie jest rzutem i nie wolno z niego liczyć metrażu -
+  // perspektywa robi z tego zgadywankę. Wymiary nanosi się ręcznie albo przez
+  // kalibrację (patrz niżej), zawsze jako podpis, nigdy jako podstawę bilansu.
+
+  const FOTO_MAX_PX = 1600;        // dłuższy bok po zmniejszeniu
+  const FOTO_JAKOSC = 0.75;        // kompresja JPEG
+  const FOTO_OSTRZEZENIE_MB = 25;  // łączny rozmiar zdjęć, przy którym ostrzegamy
+
+  function isPhotoSketch(sk) { return !!(sk && sk.kind === 'zdjecie'); }
+
+  // Przy eksporcie PNG i wydruku rysujemy szkic INNY niz otwarty w zakladce.
+  // Bez tego na kazdej stronie wydruku ladowaloby zdjecie z biezacej zakladki.
+  let renderingSketch = null;
+  function rysowanySzkic() { return renderingSketch || sketches[currentSketchIndex]; }
+
+  // Zdjęcia z tabletu mają po kilka megabajtów. Trzymanie ich w projekcie
+  // w oryginale zabiłoby i pamięć, i plik JSON, który masz wysyłać dalej.
+  // Zmniejszamy więc od razu przy wgrywaniu - do opisu ściany 1600 px w zupełności
+  // wystarcza, a plik schodzi z kilku MB do kilkuset kB.
+  function zmniejszZdjecie(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Nie udało się odczytać pliku.'));
+      reader.onload = () => {
+        const img = new Image();
+        img.onerror = () => reject(new Error('To nie wygląda na zdjęcie.'));
+        img.onload = () => {
+          try {
+            const skala = Math.min(1, FOTO_MAX_PX / Math.max(img.width, img.height));
+            const w = Math.max(1, Math.round(img.width * skala));
+            const h = Math.max(1, Math.round(img.height * skala));
+            const c = document.createElement('canvas');
+            c.width = w; c.height = h;
+            const cc = c.getContext('2d');
+            cc.drawImage(img, 0, 0, w, h);
+            resolve({ src: c.toDataURL('image/jpeg', FOTO_JAKOSC), w: w, h: h });
+          } catch (e) { reject(e); }
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // Ile miejsca zajmują zdjęcia w całym projekcie.
+  function rozmiarZdjecMB(lista) {
+    const skice = lista || sketches || [];
+    let znakow = 0;
+    skice.forEach(sk => { if (sk.photo && sk.photo.src) znakow += sk.photo.src.length; });
+    return znakow * 2 / 1024 / 1024;   // UTF-16
+  }
+
+  // Pamięć podręczna wczytanych obrazków. Bez niej każde przerysowanie płótna
+  // tworzyłoby nowy obiekt Image i zdjęcie migałoby przy każdym ruchu palca.
+  const fotoCache = {};
+  function fotoImage(sk) {
+    if (!sk || !sk.photo || !sk.photo.src) return null;
+    const klucz = sk.id + '|' + sk.photo.src.length;
+    let img = fotoCache[klucz];
+    if (!img) {
+      img = new Image();
+      img.onload = () => { renderCanvas(); };
+      img.src = sk.photo.src;
+      fotoCache[klucz] = img;
+    }
+    return (img.complete && img.naturalWidth > 0) ? img : null;
+  }
+
+  // Prostokąt, w którym leży zdjęcie na płótnie. Wpisujemy je w kwadrat
+  // 2400 px pośrodku, z zachowaniem proporcji - reszta płótna zostaje na opisy.
+  function fotoRect(sk) {
+    if (!sk || !sk.photo) return null;
+    const p = sk.photo;
+    if (p.x !== undefined && p.w2 !== undefined) {
+      return { x: p.x, y: p.y, w: p.w2, h: p.h2 };
+    }
+    const pole = 2400;
+    const s = Math.min(pole / p.w, pole / p.h);
+    const w = p.w * s, h = p.h * s;
+    return { x: (3000 - w) / 2, y: (3000 - h) / 2, w: w, h: h };
+  }
+
+  function drawPhotoBackground() {
+    const sk = rysowanySzkic();
+    if (!isPhotoSketch(sk) || !sk.photo) return;
+    const r = fotoRect(sk);
+    const img = fotoImage(sk);
+    if (img) {
+      ctx.drawImage(img, r.x, r.y, r.w, r.h);
+    } else {
+      // zdjęcie jeszcze się wczytuje - rysujemy ramkę, żeby nie było pustki
+      ctx.save();
+      ctx.fillStyle = '#e9ecef'; ctx.fillRect(r.x, r.y, r.w, r.h);
+      ctx.strokeStyle = '#adb5bd'; ctx.lineWidth = 2; ctx.strokeRect(r.x, r.y, r.w, r.h);
+      ctx.fillStyle = '#6c757d'; ctx.font = 'bold 40px Arial'; ctx.textAlign = 'center';
+      ctx.fillText('wczytywanie zdjęcia…', r.x + r.w / 2, r.y + r.h / 2);
+      ctx.restore();
+    }
+    ctx.save();
+    ctx.strokeStyle = 'rgba(44,62,80,0.6)'; ctx.lineWidth = 2;
+    ctx.strokeRect(r.x, r.y, r.w, r.h);
+    ctx.restore();
+  }
+
+  // --- wgrywanie ---
+  function addPhotoSketch() {
+    document.getElementById('photoFileInput').click();
+  }
+
+  async function handlePhotoFiles(input) {
+    const pliki = Array.from(input.files || []);
+    input.value = '';
+    if (!pliki.length) return;
+    let dodane = 0, bledy = 0;
+    for (const f of pliki) {
+      try {
+        const foto = await zmniejszZdjecie(f);
+        const nazwa = (f.name || 'Zdjęcie').replace(/\.[^.]+$/, '').slice(0, 40) || 'Zdjęcie';
+        sketches.push({
+          id: Date.now() + dodane, name: nazwa, kind: 'zdjecie', height: '',
+          photo: { src: foto.src, w: foto.w, h: foto.h, opis: '', skalaPxNaM: null },
+          objects: { lines: [], freehand: [], labels: [], rooms: [], openings: [], customDims: {},
+                     noteLines: [], apexDims: {}, hatches: [], slopes: [], callouts: [], obstacles: [] },
+          panX: -750, panY: -750, zoomLevel: 1, showDimensions: true
+        });
+        dodane++;
+      } catch (e) { bledy++; }
+    }
+    if (dodane) {
+      renderTabs();
+      switchSketch(sketches.length - 1);
+      saveStateToHistory();
+      saveProjectToStorage();
+      renderPhotoBar();
+    }
+    const mb = rozmiarZdjecMB();
+    if (bledy) alert(bledy + ' z ' + pliki.length + ' plików nie udało się wczytać.');
+    else if (mb > FOTO_OSTRZEZENIE_MB) {
+      alert('Zdjęcia w tym projekcie zajmują już ok. ' + mb.toFixed(0) + ' MB.\n\n' +
+            'Plik projektu (JSON) będzie odpowiednio duży. Jeśli masz go wysyłać, ' +
+            'rozważ podzielenie na kilka projektów.');
+    }
+  }
+
+  function removePhoto() {
+    const sk = sketches[currentSketchIndex];
+    if (!isPhotoSketch(sk) || !sk.photo) return;
+    if (!confirm('Usunąć zdjęcie z tego szkicu?\n\nOpisy i wymiary naniesione na nim zostaną.')) return;
+    delete sk.photo;
+    sk.kind = 'rzut';
+    syncSketchHeightInput(); renderPhotoBar();
+    saveStateToHistory(); renderCanvas(); renderTablesPerSketch(); saveProjectToStorage();
+  }
+
+  // --- kalibracja ---
+  //
+  // Rysujesz Miarką odcinek na czymś, czego długość znasz (framuga, płyta,
+  // złożona miarka), wpisujesz ile ma metrów - i program wylicza, ile pikseli
+  // przypada na metr NA TYM zdjęciu. Kolejne miarki dostają podpowiedź długości.
+  //
+  // To działa tylko w płaszczyźnie odniesienia. Cokolwiek leży bliżej albo
+  // dalej od aparatu, wyjdzie fałszywie - i dlatego wynik jest zawsze
+  // PODPOWIEDZIĄ do zatwierdzenia, nigdy liczbą wpisywaną automatycznie.
+  function photoScale(sk) {
+    const s = sk && sk.photo && parseFloat(sk.photo.skalaPxNaM);
+    return (isFinite(s) && s > 0) ? s : null;
+  }
+
+  function calibratePhoto() {
+    const sk = sketches[currentSketchIndex];
+    if (!isPhotoSketch(sk) || !sk.photo) { alert('Kalibracja działa tylko na szkicu ze zdjęciem.'); return; }
+    const linie = (objects.noteLines || []).filter(n => Math.hypot(n.x2 - n.x1, n.y2 - n.y1) > 5);
+    if (!linie.length) {
+      alert('Najpierw narysuj narzędziem 📐 Miarka odcinek na czymś, czego długość znasz —\n' +
+            'framuga drzwi, płyta, rozłożona miarka. Potem wróć tutaj.');
+      return;
+    }
+    const n = linie[linie.length - 1];
+    const px = Math.hypot(n.x2 - n.x1, n.y2 - n.y1);
+    const odp = prompt('Ile metrów ma ostatnio narysowany odcinek?\n\n' +
+                       'Uwaga: skala będzie poprawna tylko dla rzeczy leżących w tej samej ' +
+                       'płaszczyźnie co ten odcinek. Perspektywa zafałszuje resztę.',
+                       n.val || '');
+    if (odp === null) return;
+    const m = parseFloat(String(odp).replace(',', '.'));
+    if (!isFinite(m) || m <= 0) { alert('Podaj długość w metrach, np. 2.05'); return; }
+    sk.photo.skalaPxNaM = px / m;
+    n.val = m.toFixed(2);
+    renderPhotoBar(); saveStateToHistory(); renderCanvas(); saveProjectToStorage();
+  }
+
+  function clearPhotoScale() {
+    const sk = sketches[currentSketchIndex];
+    if (!isPhotoSketch(sk) || !sk.photo) return;
+    sk.photo.skalaPxNaM = null;
+    renderPhotoBar(); renderCanvas(); saveProjectToStorage();
+  }
+
+  // Podpowiedź długości dla miarki rysowanej na skalibrowanym zdjęciu.
+  function photoHintForNote(n) {
+    const sk = sketches[currentSketchIndex];
+    const s = photoScale(sk);
+    if (!s || !n) return null;
+    const px = Math.hypot(n.x2 - n.x1, n.y2 - n.y1);
+    if (px < 1) return null;
+    return (px / s).toFixed(2);
+  }
+
+  // --- pasek nad płótnem ---
+  function renderPhotoBar() {
+    const box = document.getElementById('photoBar');
+    if (!box) return;
+    const sk = sketches[currentSketchIndex];
+    if (!isPhotoSketch(sk)) { box.innerHTML = ''; box.style.display = 'none'; return; }
+    box.style.display = 'block';
+    const s = photoScale(sk);
+    const opis = sk.photo ? (sk.photo.opis || '') : '';
+    box.innerHTML =
+      '<div class="alert alert-secondary py-2 mb-2 d-flex flex-wrap align-items-center gap-2">' +
+      '<span class="fw-bold">🖼️ Zdjęcie</span>' +
+      '<input type="text" class="form-control form-control-sm" style="max-width:340px" ' +
+      'placeholder="Opis zdjęcia (np. ściana szczytowa od podwórza)" ' +
+      'value="' + String(opis).replace(/"/g, '&quot;') + '" oninput="setPhotoOpis(this.value)">' +
+      '<button type="button" class="btn btn-sm btn-outline-primary fw-bold" onclick="calibratePhoto()">📐 Ustaw skalę</button>' +
+      (s ? '<span class="badge text-bg-success">skala ustawiona: 1 m ≈ ' + Math.round(s) + ' px</span>' +
+           '<button type="button" class="btn btn-sm btn-outline-secondary py-0" onclick="clearPhotoScale()">wyczyść</button>'
+         : '<span class="badge text-bg-light text-muted">bez skali — wymiary wpisujesz ręcznie</span>') +
+      '<button type="button" class="btn btn-sm btn-outline-danger ms-auto fw-bold" onclick="removePhoto()">🗑️ Usuń zdjęcie</button>' +
+      '</div>' +
+      (s ? '<div class="small text-muted mb-2">Skala liczy się z odcinka odniesienia i jest wiarygodna ' +
+           'tylko w jego płaszczyźnie. Perspektywa zafałszuje wszystko, co leży bliżej lub dalej od aparatu.</div>' : '');
+  }
+
+  function setPhotoOpis(val) {
+    const sk = sketches[currentSketchIndex];
+    if (!isPhotoSketch(sk) || !sk.photo) return;
+    sk.photo.opis = String(val);
+    saveProjectToStorage();
+  }
+
+  // Narzędzia bez sensu na zdjęciu: ściany, pomieszczenia, otwory, skosy,
+  // grubość, dopasowanie skali. Wyłączamy je, zamiast pozwalać budować
+  // powierzchnie na perspektywie.
+  const NARZEDZIA_NA_ZDJECIU = ['pan', 'noteline', 'draw', 'text', 'callout', 'hatch', 'erase', 'select'];
+
+  function toolAllowedHere(mode) {
+    if (!isPhotoSketch(sketches[currentSketchIndex])) return true;
+    return NARZEDZIA_NA_ZDJECIU.indexOf(mode) !== -1;
+  }
+
+  function syncToolsForSketch() {
+    const foto = isPhotoSketch(sketches[currentSketchIndex]);
+    const wylacz = ['btnModeLine', 'btnModeMeasure', 'btnModeHideDim', 'btnModeThickness',
+                    'btnModeOpening', 'btnModeRoomTag', 'btnModeSlope', 'btnAutoFit', 'btnDimChains'];
+    wylacz.forEach(id => {
+      const b = document.getElementById(id);
+      if (b) { b.disabled = foto; b.style.opacity = foto ? 0.4 : 1; }
+    });
+    if (foto && !toolAllowedHere(currentMode)) setMode('noteline');
   }
 
   // ================= RYSUNEK W RZECZYWISTEJ SKALI =================
@@ -2283,15 +2614,16 @@
         if (o.subtract) suma += a;
         const wym = (o.w && o.d) ? (o.w + ' × ' + o.d + ' cm') : 'wg obrysu';
         wiersze += '<tr><td>' + esc(o.label || '–') + '</td><td>' + wym + '</td><td class="l">' +
-                   a.toFixed(2) + '</td><td>' + (o.subtract ? 'tak' : 'nie') + '</td></tr>';
+                   a.toFixed(2) + '</td><td><span class="kropka" style="background:' + obstacleColorHex(o) + '"></span>' +
+                   esc(obstacleColorName(o)) + '</td><td>' + (o.subtract ? 'tak' : 'nie') + '</td></tr>';
       });
     } finally { objects = saved; }
-    return '<table class="t"><thead><tr><th>Przeszkoda</th><th>Wymiary</th><th>Pow. [m²]</th><th>Odejmowana</th></tr></thead>' +
+    return '<table class="t"><thead><tr><th>Przeszkoda</th><th>Wymiary</th><th>Pow. [m²]</th><th>Kolor</th><th>Odejmowana</th></tr></thead>' +
            '<tbody>' + wiersze + '</tbody><tfoot><tr><td colspan="2">RAZEM ODEJMOWANE</td><td class="l">' +
-           suma.toFixed(2) + '</td><td></td></tr></tfoot></table>';
+           suma.toFixed(2) + '</td><td colspan="2"></td></tr></tfoot></table>';
   }
 
-  const PRINT_KIND = { rzut: 'Rzut', przekroj: 'Przekrój / elewacja', skosy: 'Przekrój poddasza' };
+  const PRINT_KIND = { rzut: 'Rzut', przekroj: 'Przekrój / elewacja', skosy: 'Przekrój poddasza', zdjecie: 'Zdjęcie z opisem' };
 
   function buildPrintHtml() {
     if (sketches[currentSketchIndex]) sketches[currentSketchIndex].objects = objects;
@@ -2304,15 +2636,18 @@
         '<header class="tabelka">' +
           '<div class="tyt"><b>' + esc(projectName) + '</b><span>' + esc(sk.name) + '</span></div>' +
           '<div class="meta"><span>' + esc(PRINT_KIND[sk.kind] || sk.kind || 'Rzut') + '</span>' +
-          (isFinite(wys) ? '<span>wys. kondygnacji ' + wys.toFixed(2) + ' m</span>' : '') +
+          (isFinite(wys) && !isPhotoSketch(sk) ? '<span>wys. kondygnacji ' + wys.toFixed(2) + ' m</span>' : '') +
+          (isPhotoSketch(sk) && sk.photo && sk.photo.opis ? '<span>' + esc(sk.photo.opis) + '</span>' : '') +
           '<span>' + data + '</span><span>' + (i + 1) + ' / ' + sketches.length + '</span></div>' +
         '</header>' +
         '<div class="rysunek">' +
           (img ? '<img src="' + img + '" alt="' + esc(sk.name) + '">'
                : '<p class="pusty">Ten szkic jest pusty.</p>') +
-          '<div class="podzialka">' + scaleBarSvg(5) + '</div>' +
+          (isPhotoSketch(sk) ? '' : '<div class="podzialka">' + scaleBarSvg(5) + '</div>') +
         '</div>' +
-        '<div class="tabele">' + printRoomTable(sk) + printOpeningTable(sk) + printObstacleTable(sk) + '</div>' +
+        '<div class="tabele">' +
+          (isPhotoSketch(sk) ? '' : printRoomTable(sk) + printOpeningTable(sk) + printObstacleTable(sk)) +
+        '</div>' +
         '</section>';
     });
 
@@ -2335,6 +2670,8 @@
       '.t thead th { background: #e9ecef; }' +
       '.t tfoot td { background: #f1f3f5; font-weight: bold; }' +
       '.t td.l { text-align: right; }' +
+      '.kropka { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; ' +
+        'vertical-align: middle; -webkit-print-color-adjust: exact; print-color-adjust: exact; }' +
       '@media print { body { padding: 0; } }' +
       '</style></head><body>' + strony + '</body></html>';
   }
@@ -2354,21 +2691,81 @@
     okno.onload = () => setTimeout(() => { try { okno.print(); } catch (e) {} }, 300);
   }
 
+  // Granice szkicu do eksportu i wydruku.
+  //
+  // Wersja pierwotna liczyla tylko punkty geometrii, a opisy przybizala stalym
+  // marginesem +/-100 px. Skutek: chmurki i etykiety wystajace poza rysunek byly
+  // na wydruku UCINANE w polowie slowa - a to wlasnie one niosa tresc, dla
+  // ktorej ktos ten wydruk oglada. Teraz kazdy podpis jest mierzony tym samym
+  // fontem, ktorym zostanie narysowany.
   function getSketchBounds(obj) {
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, found = false;
-    const put = (x, y) => { found = true; if(x<minX)minX=x; if(x>maxX)maxX=x; if(y<minY)minY=y; if(y>maxY)maxY=y; };
+    const put = (x, y) => { if (!isFinite(x) || !isFinite(y)) return;
+      found = true; if(x<minX)minX=x; if(x>maxX)maxX=x; if(y<minY)minY=y; if(y>maxY)maxY=y; };
+    const prostokat = (cx, cy, w, h) => { put(cx - w/2, cy - h/2); put(cx + w/2, cy + h/2); };
+    const mc = (typeof ctx !== 'undefined' && ctx) ? ctx : null;
+    const szerokosc = (txt, font) => {
+      if (!mc) return String(txt).length * 9;      // gdy nie ma czym zmierzyc
+      mc.save(); mc.font = font;
+      const w = mc.measureText(String(txt)).width;
+      mc.restore();
+      return w;
+    };
+
     (obj.lines||[]).forEach(l => { put(l.x1,l.y1); put(l.x2,l.y2); });
     (obj.freehand||[]).forEach(st => (st.path||[]).forEach(pt => put(pt.x, pt.y)));
-    (obj.labels||[]).forEach(l => { put(l.x-100, l.y-20); put(l.x+100, l.y+20); });
-    (obj.noteLines||[]).forEach(n => { put(n.x1, n.y1); put(n.x2, n.y2); });
+    (obj.noteLines||[]).forEach(n => {
+      put(n.x1, n.y1); put(n.x2, n.y2);
+      if (n.val) prostokat((n.x1+n.x2)/2, (n.y1+n.y2)/2, szerokosc(n.val, 'bold 16px Arial') + 12, 26);
+    });
     (obj.openings||[]).forEach(o => put(o.x, o.y));
-    (obj.rooms||[]).forEach(r => { if (r.manual) put(r.x, r.y); else (r.polygon||[]).forEach(pt => put(pt.x, pt.y)); });
+    (obj.rooms||[]).forEach(r => { if (r.manual) prostokat(r.x, r.y, 60, 60); else (r.polygon||[]).forEach(pt => put(pt.x, pt.y)); });
+    (obj.hatches||[]).forEach(h => (h.polygon||[]).forEach(pt => put(pt.x, pt.y)));
+    (obj.slopes||[]).forEach(s => { put(s.x1, s.y1); put(s.x2, s.y2); });
+
+    // etykiety tekstowe - mierzone wlasnym rozmiarem, nie na oko
+    (obj.labels||[]).forEach(l => {
+      const rozm = parseFloat(l.size) || 20;
+      const w = szerokosc(l.text || '', 'bold ' + rozm + 'px Arial') + 16;
+      prostokat(l.x, l.y, w, rozm + 14);
+    });
+
+    // chmurki - w wersji pierwotnej nie bylo ich tu WCALE, stad ucinanie
+    (obj.callouts||[]).forEach(c => {
+      const linie = String(c.text || '').split('\n');
+      let szer = 0;
+      linie.forEach(t2 => { szer = Math.max(szer, szerokosc(t2, 'bold 15px Arial')); });
+      const w = Math.min(Math.max(szer + 20, 60), 420);
+      const h = linie.length * 20 + 14;
+      prostokat(c.x, c.y, w, h);
+      put(c.tx, c.ty);                    // grot strzalki tez musi sie zmiescic
+    });
+
+    // przeszkody razem z podpisem
+    (obj.obstacles||[]).forEach(o => {
+      (o.polygon||[]).forEach(pt => put(pt.x, pt.y));
+      if (o.label && (o.polygon||[]).length) {
+        const p2 = o.polygon;
+        const cx = p2.reduce((a,q) => a+q.x, 0) / p2.length;
+        const cy = p2.reduce((a,q) => a+q.y, 0) / p2.length;
+        prostokat(cx, cy, szerokosc(o.label, 'bold 13px Arial') + 14, 24);
+      }
+    });
+
     if(!found) return null;
     return { minX, minY, maxX, maxY };
   }
 
   function renderSketchToDataURL(sketch) {
-    const b = getSketchBounds(sketch.objects);
+    let b = getSketchBounds(sketch.objects);
+    // szkic ze zdjeciem moze nie miec ani jednego obiektu, a i tak jest co pokazac:
+    // granice musza objac samo zdjecie, inaczej eksport by je obcial
+    if (isPhotoSketch(sketch) && sketch.photo) {
+      const r = fotoRect(sketch);
+      b = b ? { minX: Math.min(b.minX, r.x), minY: Math.min(b.minY, r.y),
+                maxX: Math.max(b.maxX, r.x + r.w), maxY: Math.max(b.maxY, r.y + r.h) }
+            : { minX: r.x, minY: r.y, maxX: r.x + r.w, maxY: r.y + r.h };
+    }
     if (!b) return null;
     const pad = 140;
     const w = Math.round(b.maxX - b.minX) + pad*2;
@@ -2377,7 +2774,7 @@
     off.width = Math.min(4000, Math.max(200, w)); off.height = Math.min(4000, Math.max(200, h));
     const octx = off.getContext('2d');
     const sv = { ctx: ctx, objects: objects, mode: currentMode, drawing: drawing, guides: guideLines, hover: hoverPos, seg: selectedSegKey, dims: showDimensions };
-    ctx = octx; objects = sketch.objects; currentMode = 'export'; drawing = false; guideLines = []; hoverPos = null; selectedSegKey = null;
+    ctx = octx; objects = sketch.objects; currentMode = 'export'; renderingSketch = sketch; drawing = false; guideLines = []; hoverPos = null; selectedSegKey = null;
     // Wymiary w raporcie mają wyglądać dokładnie tak, jak na szkicu:
     // jeśli w danej zakładce wyłączyłeś je przyciskiem 👁️, w raporcie też ich nie ma.
     showDimensions = (sketch.showDimensions !== undefined) ? sketch.showDimensions : true;
@@ -2387,7 +2784,7 @@
       drawScene();
       octx.restore();
     } finally {
-      ctx = sv.ctx; objects = sv.objects; currentMode = sv.mode; drawing = sv.drawing; guideLines = sv.guides; hoverPos = sv.hover; selectedSegKey = sv.seg; showDimensions = sv.dims;
+      ctx = sv.ctx; objects = sv.objects; currentMode = sv.mode; renderingSketch = null; drawing = sv.drawing; guideLines = sv.guides; hoverPos = sv.hover; selectedSegKey = sv.seg; showDimensions = sv.dims;
     }
     return off.toDataURL('image/png');
   }
@@ -3738,8 +4135,17 @@
   function isSectionSketch(sk) { return sk && (sk.kind === 'przekroj' || sk.kind === 'skosy'); }
 
   function setSketchKind(val) {
-    if (sketches[currentSketchIndex]) sketches[currentSketchIndex].kind = val;
+    const sk = sketches[currentSketchIndex];
+    if (sk && val === 'zdjecie' && !sk.photo) {
+      // rodzaj "zdjecie" bez zdjecia nie ma sensu - odsylamy do wgrania
+      alert('Szkic ze zdjęciem tworzy się przyciskiem 🖼️ Zdjęcie na górze — wtedy od razu wybierasz plik.');
+      syncSketchHeightInput();
+      return;
+    }
+    if (sk) sk.kind = val;
     syncSketchHeightInput();
+    syncToolsForSketch();
+    renderPhotoBar();
     renderTablesPerSketch();
     renderCanvas();
   }
@@ -3756,7 +4162,7 @@
     const kindSel = document.getElementById('sketchKindSelect');
     if (kindSel) kindSel.value = (sk && sk.kind) ? sk.kind : 'rzut';
     const wrap = document.getElementById('sketchHeightWrap');
-    if (wrap) wrap.style.display = isSectionSketch(sk) ? 'none' : 'inline-flex';
+    if (wrap) wrap.style.display = (isSectionSketch(sk) || isPhotoSketch(sk)) ? 'none' : 'inline-flex';
   }
 
   function sketchHeightNum(sketch) {
@@ -3770,7 +4176,9 @@
     panX = sketches[index].panX; panY = sketches[index].panY; zoomLevel = sketches[index].zoomLevel;
     showDimensions = (sketches[index].showDimensions !== undefined) ? sketches[index].showDimensions : true;
     syncDimsToggleButton(); syncSketchHeightInput();
-    undoStack = []; saveStateToHistory(); deselectObjects(); recalculateRooms(); renderTabs(); updateCanvasTransform(); renderCanvas();
+    undoStack = []; saveStateToHistory(); deselectObjects(); recalculateRooms(); renderTabs();
+    syncToolsForSketch(); renderPhotoBar();
+    updateCanvasTransform(); renderCanvas();
   }
 
   // ================= SZABLONY SZKICOW =================
@@ -4166,6 +4574,8 @@
   }
 
   function runChecks() {
+    // zdjecie nie jest rzutem - nie ma tu czego kontrolowac
+    if (isPhotoSketch(sketches[currentSketchIndex])) return [];
     const saved = objects;
     let all = [];
     const floorAreas = [];
@@ -4450,7 +4860,7 @@
           }
           const przeszkody = sketch.objects.obstacles || [];
           if (przeszkody.length) {
-              html += `<h6 class="text-primary fw-bold mt-2">Przeszkody:</h6><table class="table table-sm table-bordered"><thead><tr class="table-light"><th>Opis</th><th>Wymiary</th><th>Pow. (m²)</th><th>Odejmowana</th><th></th></tr></thead><tbody>`;
+              html += `<h6 class="text-primary fw-bold mt-2">Przeszkody:</h6><table class="table table-sm table-bordered"><thead><tr class="table-light"><th>Opis</th><th>Wymiary</th><th>Pow. (m²)</th><th>Kolor</th><th>Odejmowana</th><th></th></tr></thead><tbody>`;
               let sumaPrz = 0;
               const zapis = objects; objects = sketch.objects;
               try {
@@ -4458,7 +4868,7 @@
                     const a = obstacleAreaM2(o);
                     if (o.subtract) sumaPrz += a;
                     const wym = (o.w && o.d) ? `${o.w} × ${o.d} cm` : 'wg obrysu';
-                    html += `<tr><td>${o.label || '—'}</td><td>${wym}</td><td class="fw-bold">${a.toFixed(2)}</td><td>${o.subtract ? 'tak' : 'nie'}</td><td class="text-nowrap"><button class="btn btn-sm btn-outline-primary py-0 px-1" onclick="editObstacleFromTable(${index}, ${oi})" title="Edytuj">✏️</button></td></tr>`;
+                    html += `<tr><td>${o.label || '—'}</td><td>${wym}</td><td class="fw-bold">${a.toFixed(2)}</td><td><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${obstacleColorHex(o)};vertical-align:middle"></span> ${obstacleColorName(o)}</td><td>${o.subtract ? 'tak' : 'nie'}</td><td class="text-nowrap"><button class="btn btn-sm btn-outline-primary py-0 px-1" onclick="editObstacleFromTable(${index}, ${oi})" title="Edytuj">✏️</button></td></tr>`;
                 });
               } finally { objects = zapis; }
               html += `</tbody><tfoot><tr class="table-info fw-bold"><td colspan="2" class="text-end">RAZEM ODEJMOWANE:</td><td>${sumaPrz.toFixed(2)} m²</td><td colspan="2"></td></tr></tfoot></table>`;
@@ -4550,6 +4960,12 @@
   };
 
   function setMode(mode) {
+    if (typeof toolAllowedHere === 'function' && !toolAllowedHere(mode)) {
+      alert('To narzędzie nie działa na zdjęciu.\n\nZdjęcie nie jest rzutem — perspektywa sprawia, ' +
+            'że nie da się z niego liczyć powierzchni. Do opisu użyj 📐 Miarki, ✏️ Ołówka, 🔤 Txt ' +
+            'albo 💬 Komentarza.');
+      return;
+    }
     currentMode = mode; deselectObjects(); renderCanvas();
     for (let m in MODE_BUTTONS) {
       let [id, offCls, onCls] = MODE_BUTTONS[m];
@@ -4801,6 +5217,39 @@
     return !(a.x + a.w < b.x || b.x + b.w < a.x || a.y + a.h < b.y || b.y + b.h < a.y);
   }
 
+  // Miejsce zajete przez podpisy ustawione recznie. Nic tu nie rysujemy -
+  // tylko zglaszamy, ze te prostokaty sa zajete.
+  function reserveManualAnnotations() {
+    const zmierz = (txt, font) => {
+      ctx.save(); ctx.font = font;
+      const w = ctx.measureText(String(txt)).width;
+      ctx.restore();
+      return w;
+    };
+    (objects.callouts || []).forEach(c => {
+      const b = calloutBox(ctx, c);
+      dimLabelRects.push({ x: b.lewo, y: b.gora, w: b.w, h: b.h });
+    });
+    (objects.labels || []).forEach(l => {
+      const rozm = parseFloat(l.size) || 20;
+      const w = zmierz(l.text || '', 'bold ' + rozm + 'px Arial') + 16;
+      dimLabelRects.push({ x: l.x - w / 2, y: l.y - (rozm + 14) / 2, w: w, h: rozm + 14 });
+    });
+    (objects.obstacles || []).forEach(o => {
+      if (!o.label || !(o.polygon || []).length) return;
+      const p = o.polygon;
+      const cx = p.reduce((a, q) => a + q.x, 0) / p.length;
+      const cy = p.reduce((a, q) => a + q.y, 0) / p.length;
+      const w = zmierz(o.label, 'bold 13px Arial') + 14;
+      dimLabelRects.push({ x: cx - w / 2, y: cy - 12, w: w, h: 24 });
+    });
+    (objects.noteLines || []).forEach(n => {
+      if (!n.val) return;
+      const w = zmierz(n.val, 'bold 16px Arial') + 12;
+      dimLabelRects.push({ x: (n.x1 + n.x2) / 2 - w / 2, y: (n.y1 + n.y2) / 2 - 13, w: w, h: 26 });
+    });
+  }
+
   function reserveLabelRect(cx, cy, w, h) {
     const r = { x: cx - w/2, y: cy - h/2, w, h };
     dimLabelRects.push(r);
@@ -4809,7 +5258,10 @@
 
   function findFreeLabelSpot(x, y, w, h, nx, ny) {
     const step = h * 0.95;
-    for (let k = 0; k < 8; k++) {
+    // 14 krokow zamiast 8: przy gestym rysunku z chmurkami i podpisami
+    // przeszkod osiem prob konczylo sie zwrotem null i podpis ladowal
+    // na wierzchu innego
+    for (let k = 0; k < 14; k++) {
       const signs = (k === 0) ? [0] : [1, -1];
       for (const sgn of signs) {
         const cx = x + nx * step * k * sgn;
@@ -4982,6 +5434,8 @@
 
   function drawScene() {
     dimLabelRects = [];
+    reserveManualAnnotations();
+    drawPhotoBackground();
 
     // SKOSY PODDASZA - linia wzdłuż skosu z oznaczeniem i wymiarami
     (objects.slopes || []).forEach(sl => {
@@ -6448,6 +6902,10 @@
       if (!objects.noteLines) objects.noteLines = [];
       let nl = { x1: startPos.x, y1: startPos.y, x2: currentPos.x, y2: currentPos.y, color: currentNoteColor, val: '' };
       if (Math.hypot(nl.x2 - nl.x1, nl.y2 - nl.y1) > 10) {
+        // na skalibrowanym zdjeciu podpowiadamy dlugosc; to PODPOWIEDZ,
+        // uzytkownik zatwierdza ja albo nadpisuje
+        const hint = (typeof photoHintForNote === 'function') ? photoHintForNote(nl) : null;
+        if (hint) nl.val = hint;
         objects.noteLines.push(nl);
         saveStateToHistory();
         selectedNoteIndex = objects.noteLines.length - 1;

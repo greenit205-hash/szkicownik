@@ -184,6 +184,76 @@ MUTACJE = [
      "    return wallSideOf(line) === 'os' ? t / 2 : t;",
      "    return t / 2;"),
 
+    ('zdjecia nie sa zmniejszane przy wgrywaniu',
+     'tests/test-zdjecia.js',
+     "  const FOTO_MAX_PX = 1600;",
+     "  const FOTO_MAX_PX = 99999;"),
+
+    ('kontrola pomiarow liczy tez zdjecia',
+     'tests/test-zdjecia.js',
+     "    if (isPhotoSketch(sketches[currentSketchIndex])) return [];",
+     "    if (false) return [];"),
+
+    ('narzedzia rysunkowe dostepne na zdjeciu',
+     'tests/test-zdjecia.js',
+     "    if (!isPhotoSketch(sketches[currentSketchIndex])) return true;\n    return NARZEDZIA_NA_ZDJECIU.indexOf(mode) !== -1;",
+     "    return true;"),
+
+    ('skala zdjecia podpowiada mimo braku kalibracji',
+     'tests/test-zdjecia.js',
+     "    if (!s || !n) return null;",
+     "    if (!n) return null;\n    if (!s) return '1.00';"),
+
+    ('kalibracja przyjmuje dlugosc zero i ujemna',
+     'tests/test-zdjecia.js',
+     "    if (!isFinite(m) || m <= 0) { alert('Podaj długość w metrach, np. 2.05'); return; }",
+     "    if (false) { return; }"),
+
+    ('granice eksportu nie obejmuja zdjecia',
+     'tests/test-zdjecia.js',
+     "    if (isPhotoSketch(sketch) && sketch.photo) {",
+     "    if (false) {"),
+
+    ('zdjecie rysowane niezaleznie od rodzaju szkicu',
+     'tests/test-zdjecia.js',
+     "    if (!isPhotoSketch(sk) || !sk.photo) return;\n    const r = fotoRect(sk);",
+     "    if (!sk || !sk.photo) return;\n    const r = fotoRect(sk);"),
+
+    ('reczne podpisy nie rezerwuja miejsca - wymiary siadaja na nich',
+     'tests/test-opisy.js',
+     "    reserveManualAnnotations();\n    drawPhotoBackground();",
+     "    drawPhotoBackground();"),
+
+    ('podpisy mierzone na oko zamiast fontem',
+     'tests/test-opisy.js',
+     "      const w = zmierz(l.text || '', 'bold ' + rozm + 'px Arial') + 16;",
+     "      const w = 60;"),
+
+    ('chmurki poza granicami eksportu - ucinaja sie na wydruku',
+     'tests/test-opisy.js',
+     "    (obj.callouts||[]).forEach(c => {",
+     "    [].forEach(c => {"),
+
+    ('podpisy przeszkod poza granicami eksportu',
+     'tests/test-opisy.js',
+     "        prostokat(cx, cy, szerokosc(o.label, 'bold 13px Arial') + 14, 24);",
+     "        prostokat(cx, cy, 0, 0);"),
+
+    ('etykiety mierzone stalym marginesem, jak przed poprawka',
+     'tests/test-opisy.js',
+     "      const w = szerokosc(l.text || '', 'bold ' + rozm + 'px Arial') + 16;\n      prostokat(l.x, l.y, w, rozm + 14);",
+     "      prostokat(l.x, l.y, 200, 40);"),
+
+    ('kolor przeszkody ignorowany',
+     'tests/test-opisy.js',
+     "    const wpis = OBSTACLE_COLORS.find(c => c.id === (o && o.kolor));\n    if (wpis) return wpis.hex;",
+     "    const wpis = null;\n    if (wpis) return wpis.hex;"),
+
+    ('kolor nie zapisuje sie przy przeszkodzie',
+     'tests/test-opisy.js',
+     "      o.label = label; o.subtract = subtract; o.kolor = kolor;",
+     "      o.label = label; o.subtract = subtract;"),
+
     ('limit dlugosci sciany 30 m podmieniony na 3 m',
      'tests/test-kontrola.js',
      "CHECK_WALL_MIN = 0.3, CHECK_WALL_MAX = 30;",
