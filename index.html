@@ -96,7 +96,7 @@
           <option value="">📐 Wstaw szablon...</option>
         </select>
       </div>
-      <p class="text-muted small mb-2 d-none d-md-block"><strong>Wskazówka:</strong> rysunek jest tylko szkicem — liczą się wyłącznie wpisane wymiary (<strong>✍️ Wymiaruj</strong>). Ściany rysuje się narzędziem <strong>📏 Ściana</strong>; pole <strong>Grubość</strong> obok decyduje, czy ściana będzie cienką linią (0), czy zakreskowanym pasem. Przy włączonej <strong>📐 Skali 1:1</strong> rysunek sam dociąga się do wpisanych wymiarów, więc odległości na ekranie odpowiadają rzeczywistym.</p>
+      <p class="text-muted small mb-2 d-none d-md-block"><strong>Wskazówka:</strong> rysunek jest tylko szkicem — liczą się wyłącznie wpisane wymiary (<strong>✍️ Wymiaruj</strong>). Ściany rysuje się narzędziem <strong>📏 Ściana</strong>; pole <strong>Grubość</strong> obok decyduje, czy ściana będzie cienką linią (0), czy zakreskowanym pasem, a <strong>Pas</strong> — po której stronie rysowanej linii ten mur leży. Wymiary i powierzchnie liczą się zawsze po linii, którą rysujesz. Przy włączonej <strong>📐 Skali 1:1</strong> rysunek sam dociąga się do wpisanych wymiarów, więc odległości na ekranie odpowiadają rzeczywistym.</p>
       <div id="canvasWrapper" class="flex-grow-1 d-flex flex-column">
         <div class="d-flex flex-wrap gap-2 mb-2 bg-light p-2 border rounded align-items-center">
           <div class="btn-group flex-wrap shadow-sm">
@@ -135,6 +135,12 @@
           <span class="thick-box" title="Grubość ściany rysowanej narzędziem 📏 Ściana. 0 = cienka linia.">
             <label class="small fw-bold text-muted mb-0 text-nowrap">🧱 Grubość [cm]:</label>
             <input type="number" min="0" max="200" step="1" inputmode="numeric" id="wallThicknessInput" class="form-control form-control-sm fw-bold" value="0" oninput="setDefaultThickness(this.value)">
+            <label class="small fw-bold text-muted mb-0 text-nowrap ms-1" title="Po której stronie rysowanej linii leży mur">Pas:</label>
+            <select id="wallSideSelect" class="form-select form-select-sm" style="width:auto;" onchange="setDefaultSide(this.value)">
+              <option value="os">na osi</option>
+              <option value="lewa">po lewej</option>
+              <option value="prawa">po prawej</option>
+            </select>
           </span>
           <div class="btn-group flex-wrap ms-auto mt-2 mt-md-0">
             <button type="button" id="btnModePan" class="btn btn-outline-success btn-sm fw-bold" onclick="setMode('pan')">✋ Przesuń</button>
@@ -461,8 +467,21 @@
   <div class="card shadow p-3" style="width: 320px;">
     <h6 class="fw-bold mb-2 text-dark">🧱 Grubość ściany</h6>
     <p class="small text-muted mb-2">Podaj grubość w centymetrach. <b>0</b> = cienka linia (jak dotąd).
-       Grubość jest wyłącznie rysunkowa — wymiary i powierzchnie liczą się po osiach ścian.</p>
+       Wymiary i powierzchnie liczą się zawsze po <b>narysowanej linii</b> — wybór strony
+       decyduje tylko o tym, gdzie względem niej namalowany zostanie mur. Rysując po licu
+       wewnętrznym i kładąc pas na zewnątrz, dostajesz powierzchnię w świetle ścian wprost.
+       „Lewa" i „prawa" liczą się względem kierunku rysowania; jeśli mur siadł nie po tej
+       stronie, przerzuć go przyciskiem ⇄.</p>
     <input type="number" min="0" max="200" step="1" inputmode="numeric" id="thickInput" class="form-control form-control-sm mb-2 fw-bold" placeholder="np. 25">
+    <label class="small fw-bold text-muted mb-1">Po której stronie linii leży mur</label>
+    <div class="d-flex gap-1 mb-2">
+      <select id="thickSide" class="form-select form-select-sm">
+        <option value="os">na osi — po połowie na każdą stronę</option>
+        <option value="lewa">po lewej stronie linii</option>
+        <option value="prawa">po prawej stronie linii</option>
+      </select>
+      <button type="button" class="btn btn-sm btn-outline-secondary text-nowrap" onclick="flipThickSide()" title="Przerzuć mur na drugą stronę">⇄</button>
+    </div>
     <div class="d-flex gap-1 mb-2 flex-wrap">
       <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" onclick="setThickPreset(8)">8</button>
       <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" onclick="setThickPreset(12)">12</button>
@@ -551,6 +570,7 @@
   let globalOpeningsMemory = {};
   let projectName = 'Projekt bez nazwy';
   let defaultThicknessCm = 0;
+  let defaultWallSide = 'os';
   let sketches = [];
   let currentSketchIndex = 0;
   let objects = null;
@@ -590,12 +610,25 @@
     ctx.save(); ctx.fillStyle = gridPattern; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.restore();
   }
   // ================= GRUBOŚĆ ŚCIAN =================
-  // Grubosc jest WYLACZNIE warstwa rysunkowa. Wymiary i powierzchnie liczy sie
-  // po osiach scian - dokladnie tak, jak dotad. Dzieki temu zmiana grubosci nie
-  // rusza sprawdzonego silnika wymiarowania i nie uniewaznia jego testow.
-  // Brak pola `gr` (stare szkice) = cienka linia, jak przed ta funkcja.
+  //
+  // NARYSOWANA LINIA JEST LINIĄ ODNIESIENIA. Wszystko - wymiary, obrysy
+  // pomieszczeń, powierzchnie, przyciąganie i domykanie narożników - liczy się
+  // po niej i tylko po niej. Grubość decyduje wyłącznie o tym, po której
+  // stronie tej linii zostanie namalowany zakreskowany pas:
+  //
+  //   'os'    pas rozłożony po połowie na każdą stronę  (domyślnie, jak dotąd)
+  //   'lewa'  pas w całości po lewej stronie kierunku rysowania
+  //   'prawa' pas w całości po prawej
+  //
+  // Dzięki temu wybór strony NIE rusza geometrii: narożniki domykają się tak
+  // samo, klucze odcinków zostają te same, a pomiary nie wędrują. Jeśli
+  // rysujesz po licu wewnętrznym i ustawisz pas na zewnątrz, powierzchnia
+  // wychodzi wprost w świetle ścian - bez żadnych przeliczeń.
+  //
+  // Brak pola `gr` (stare szkice) = cienka linia, jak przed tą funkcją.
   const WALL_HATCH_STEP = 10;      // px - odstep kresek w pasie sciany
   const MAX_THICKNESS_CM = 200;
+  const STRONY = ['lewa', 'os', 'prawa'];
 
   function wallThicknessOf(line) {
     const v = parseFloat(line && line.gr);
@@ -607,6 +640,33 @@
     return wallThicknessOf(line) / 100 * PIXELS_PER_METER;
   }
 
+  // Po ktorej stronie linii lezy pas. Brak pola = os, jak w starych szkicach.
+  function wallSideOf(line) {
+    const s = line && line.str;
+    return STRONY.indexOf(s) === -1 ? 'os' : s;
+  }
+
+  // Przesuniecie SRODKA pasa wzgledem linii, w pikselach, wzdluz normalnej
+  // n = (-uy, ux). Dla osi zero, dla strony polowa grubosci.
+  function wallBandOffsetPx(line) {
+    const s = wallSideOf(line);
+    if (s === 'os') return 0;
+    const h = wallThicknessPx(line) / 2;
+    return s === 'prawa' ? h : -h;
+  }
+
+  // Jak daleko od wlasnej linii siega pas - potrzebne przy domykaniu naroznikow.
+  function wallReachPx(line) {
+    const t = wallThicknessPx(line);
+    return wallSideOf(line) === 'os' ? t / 2 : t;
+  }
+
+  function setDefaultSide(val) {
+    defaultWallSide = STRONY.indexOf(val) === -1 ? 'os' : val;
+    renderCanvas();
+    saveProjectToStorage();
+  }
+
   function setDefaultThickness(val) {
     let v = parseFloat(val);
     if (!isFinite(v) || v < 0) v = 0;
@@ -615,25 +675,27 @@
   }
 
   // Nadmiar pasa na koncu sciany. Cienka sciana wpadajaca w gruba musi siegac
-  // ZA jej os, inaczej w narozniku zostaje dziura. Dlatego nadmiar liczymy
-  // z polowy NAJGRUBSZEJ sciany schodzacej sie w tym wezle, nie z wlasnej.
+  // ZA jej linie, inaczej w narozniku zostaje dziura. Nadmiar liczymy wiec
+  // z NAJDALEJ SIEGAJACEJ sciany schodzacej sie w tym wezle - a przy pasie
+  // ustawionym na strone zasieg to cala grubosc, nie polowa.
   // To wystarcza przy katach prostych, czyli w 95% przypadkow; wlasciwe
   // docinanie narozy (mitre) to osobny, duzo wiekszy temat.
   function cornerOvershoot(line, x, y) {
-    let max = wallThicknessPx(line) / 2;
+    let max = wallReachPx(line);
     (objects.lines || []).forEach(l => {
       if (l === line) return;
       const trafia = (Math.hypot(l.x1 - x, l.y1 - y) < FACE_TOL + 1) ||
                      (Math.hypot(l.x2 - x, l.y2 - y) < FACE_TOL + 1);
       if (!trafia) return;
-      const h = wallThicknessPx(l) / 2;
+      const h = wallReachPx(l);
       if (h > max) max = h;
     });
     // pol piksela zapasu, zeby na styku pasow nie zostawala wlosowata szpara
     return max + 0.5;
   }
 
-  // Czworokat pasa sciany: os +/- gr/2, z nadmiarem na koncach (patrz wyzej).
+  // Czworokat pasa sciany: srodek pasa przesuniety wzgledem linii o tyle,
+  // ile kaze wybrana strona, z nadmiarem na koncach (patrz wyzej).
   function wallBandPolygon(line) {
     const t = wallThicknessPx(line);
     if (t <= 0) return null;
@@ -643,10 +705,11 @@
     const ux = dx / len, uy = dy / len;
     const nx = -uy, ny = ux;
     const h = t / 2;
+    const o = wallBandOffsetPx(line);
     const e1 = cornerOvershoot(line, line.x1, line.y1);
     const e2 = cornerOvershoot(line, line.x2, line.y2);
-    const ax = line.x1 - ux * e1, ay = line.y1 - uy * e1;
-    const bx = line.x2 + ux * e2, by = line.y2 + uy * e2;
+    const ax = line.x1 - ux * e1 + nx * o, ay = line.y1 - uy * e1 + ny * o;
+    const bx = line.x2 + ux * e2 + nx * o, by = line.y2 + uy * e2 + ny * o;
     return [
       { x: ax + nx * h, y: ay + ny * h },
       { x: bx + nx * h, y: by + ny * h },
@@ -713,8 +776,23 @@
     thickLineIndex = index;
     const l = objects.lines[index];
     document.getElementById('thickInput').value = wallThicknessOf(l) || '';
+    document.getElementById('thickSide').value = wallSideOf(l);
     document.getElementById('thickApplyAll').checked = false;
     document.getElementById('thickOverlay').style.display = 'flex';
+  }
+
+  // Przerzucenie pasa na druga strone linii. Najszybszy sposob na poprawke,
+  // gdy sciana zostala narysowana w druga strone, niz sie mysli - bo "lewa"
+  // i "prawa" licza sie wzgledem kierunku rysowania.
+  function flipThickSide() {
+    const sel = document.getElementById('thickSide');
+    if (sel.value === 'lewa') sel.value = 'prawa';
+    else if (sel.value === 'prawa') sel.value = 'lewa';
+    else return;
+    if (thickLineIndex >= 0 && objects.lines[thickLineIndex]) {
+      objects.lines[thickLineIndex].str = sel.value;
+      renderCanvas();
+    }
   }
   function closeThickDialog() {
     thickLineIndex = -1;
@@ -725,15 +803,22 @@
     let v = parseFloat(document.getElementById('thickInput').value);
     if (!isFinite(v) || v < 0) v = 0;
     if (v > MAX_THICKNESS_CM) { alert('Grubość ponad ' + MAX_THICKNESS_CM + ' cm wygląda na pomyłkę.'); return; }
-    const all = document.getElementById('thickApplyAll').checked;
-    if (all) (objects.lines || []).forEach(l => { if (v > 0) l.gr = v; else delete l.gr; });
-    else if (thickLineIndex >= 0 && objects.lines[thickLineIndex]) {
-      const l = objects.lines[thickLineIndex];
+    const str = document.getElementById('thickSide').value;
+    const strona = STRONY.indexOf(str) === -1 ? 'os' : str;
+    const ustaw = (l) => {
       if (v > 0) l.gr = v; else delete l.gr;
-    }
+      // 'os' zapisujemy jako brak pola - stare szkice i tak tak wygladaja
+      if (strona === 'os') delete l.str; else l.str = strona;
+    };
+    const all = document.getElementById('thickApplyAll').checked;
+    if (all) (objects.lines || []).forEach(ustaw);
+    else if (thickLineIndex >= 0 && objects.lines[thickLineIndex]) ustaw(objects.lines[thickLineIndex]);
     defaultThicknessCm = v;
+    defaultWallSide = strona;
     const inp = document.getElementById('wallThicknessInput');
     if (inp) inp.value = v;
+    const sel = document.getElementById('wallSideSelect');
+    if (sel) sel.value = strona;
     closeThickDialog();
     saveStateToHistory(); renderCanvas(); saveProjectToStorage();
   }
@@ -753,6 +838,7 @@
       nazwa: projectName,
       zapisano: new Date().toISOString(),
       domyslnaGrubosc: defaultThicknessCm,
+      domyslnaStrona: defaultWallSide,
       sketches: sketches
     };
   }
@@ -762,6 +848,7 @@
     sketches = data.sketches;
     projectName = data.nazwa || 'Projekt bez nazwy';
     defaultThicknessCm = parseFloat(data.domyslnaGrubosc) || 0;
+    defaultWallSide = STRONY.indexOf(data.domyslnaStrona) === -1 ? 'os' : data.domyslnaStrona;
     sketches.forEach(sk => {
       const o = sk.objects = sk.objects || {};
       ['lines', 'freehand', 'labels', 'rooms', 'openings', 'noteLines', 'hatches', 'slopes', 'callouts', 'obstacles']
@@ -5058,6 +5145,14 @@
       });
     }
 
+    if (drawing && currentMode === 'line' && startPos && currentPos && defaultThicknessCm > 0) {
+      const podglad = { x1: startPos.x, y1: startPos.y, x2: currentPos.x, y2: currentPos.y,
+                        gr: defaultThicknessCm, str: defaultWallSide };
+      if (Math.hypot(currentPos.x - startPos.x, currentPos.y - startPos.y) > 3) {
+        ctx.save(); ctx.globalAlpha = 0.55; drawWallBand(podglad); ctx.restore();
+      }
+    }
+
     if (warstwaWidoczna('obstacles')) drawObstacles();
     if (dimChainsOn) drawDimChains();
     if (drawing && currentMode === 'obstacle' && startPos && currentPos) {
@@ -5367,13 +5462,25 @@
       if (prosto === 'poziom') cel = { x: raw.x, y: od.y };
       else if (prosto === 'pion') cel = { x: od.x, y: raw.y };
       else cel = naKierunek(od, raw, parseFloat(prosto.slice(4)));
-      // wezel tuz przy wyprostowanej linii - domykamy naroznik
-      const przy = findSnapPoint(cel);
-      if (przy.type === 'node' && Math.hypot(przy.pt.x - cel.x, przy.pt.y - cel.y) <= ORTHO_NODE_TOL / zoomLevel) {
-        return { pt: przy.pt, prosto: true };
+
+      // Kierunek wyprostowanej linii i normalna do niej.
+      const dl = Math.hypot(cel.x - od.x, cel.y - od.y);
+      if (dl > 0.001) {
+        const ux = (cel.x - od.x) / dl, uy = (cel.y - od.y) / dl;
+        const przy = findSnapPoint(cel);
+        if (przy.type !== 'none') {
+          const wx = przy.pt.x - od.x, wy = przy.pt.y - od.y;
+          const wzdluz = wx * ux + wy * uy;              // jak daleko po linii
+          const wPoprzek = Math.abs(wx * -uy + wy * ux); // jak daleko od linii
+          const limit = (przy.type === 'node' ? ORTHO_NODE_TOL : SNAP_RADIUS) / zoomLevel;
+          // Bierzemy WYLACZNIE skladowa wzdluz linii. Punkt przyciagania
+          // przesuwa koniec sciany blizej albo dalej, ale nigdy jej nie przechyla.
+          if (wPoprzek <= limit && wzdluz > 0) {
+            cel = { x: od.x + ux * wzdluz, y: od.y + uy * wzdluz };
+          }
+        }
       }
-      if (przy.type === 'line') return { pt: przy.pt, prosto: true };
-      checkAlignmentGuides(cel, od);
+      checkAlignmentGuides(cel, od, prosto === 'poziom' ? 'y' : (prosto === 'pion' ? 'x' : 'oba'));
       return { pt: cel, prosto: true };
     }
     // kierunek wyraznie ukosny - przyciaganie dziala jak dotad
@@ -5383,8 +5490,13 @@
     return { pt: { x: raw.x, y: raw.y }, prosto: false };
   }
 
-  function checkAlignmentGuides(target, basePos) {
+  // `blokada` mowi, ktorej wspolrzednej NIE WOLNO ruszac, bo trzyma ja
+  // wyprostowana linia: 'y' przy scianie poziomej, 'x' przy pionowej,
+  // 'oba' przy skosie 45 stopni. Bez tego wyrownanie przechyla sciane.
+  function checkAlignmentGuides(target, basePos, blokada) {
     let bestDx = 20 / zoomLevel; let bestDy = 20 / zoomLevel; let alignX = null, alignY = null;
+    const wolnoX = blokada !== 'x' && blokada !== 'oba';
+    const wolnoY = blokada !== 'y' && blokada !== 'oba';
     objects.lines.forEach(l => {
         let pts = [{x: l.x1, y: l.y1}, {x: l.x2, y: l.y2}, {x: (l.x1+l.x2)/2, y: (l.y1+l.y2)/2}];
         pts.forEach(p => {
@@ -5394,8 +5506,8 @@
             }
         });
     });
-    if (alignX !== null) { target.x = alignX; guideLines.push({x1: alignX, y1: -5000, x2: alignX, y2: 5000}); }
-    if (alignY !== null) { target.y = alignY; guideLines.push({x1: -5000, y1: alignY, x2: 5000, y2: alignY}); }
+    if (alignX !== null && wolnoX) { target.x = alignX; guideLines.push({x1: alignX, y1: -5000, x2: alignX, y2: 5000}); }
+    if (alignY !== null && wolnoY) { target.y = alignY; guideLines.push({x1: -5000, y1: alignY, x2: 5000, y2: alignY}); }
   }
 
   function isPointInPolygon(point, vs) {
@@ -6304,6 +6416,8 @@
       let newLine = { x1: snapTo1cm(startPos.x), y1: snapTo1cm(startPos.y), x2: snapTo1cm(currentPos.x), y2: snapTo1cm(currentPos.y), hiddenDim: false, customDim: null, needsDim: false };
       // grubosc tylko wtedy, gdy zostala ustawiona - brak pola = cienka linia, jak dotad
       if (defaultThicknessCm > 0) newLine.gr = defaultThicknessCm;
+      // 'os' zostaje bez pola, zeby stare i nowe szkice wygladaly tak samo
+      if (defaultThicknessCm > 0 && defaultWallSide !== 'os') newLine.str = defaultWallSide;
       if(Math.hypot(newLine.x2 - newLine.x1, newLine.y2 - newLine.y1) > 5) {
           let dupe = objects.lines.find(l => linesNearlyOverlap(l, newLine));
           if (dupe) {

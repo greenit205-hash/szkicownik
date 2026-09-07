@@ -16,8 +16,8 @@ MUTACJE = [
 
     ('pas o polowe za waski',
      'tests/test-grubosc.js',
-     "    const h = t / 2;\n    const e1 = cornerOvershoot",
-     "    const h = t / 4;\n    const e1 = cornerOvershoot"),
+     "    const h = t / 2;\n    const o = wallBandOffsetPx(line);",
+     "    const h = t / 4;\n    const o = wallBandOffsetPx(line);"),
 
     ('brak nadmiaru na koncach - dziura w naroznikach',
      'tests/test-grubosc.js',
@@ -153,6 +153,36 @@ MUTACJE = [
      'tests/test-skala.js',
      "                    if (o.subtract) sumaPrz += a;",
      "                    sumaPrz += a;"),
+
+    ('prowadnice znow przechylaja wyprostowana sciane',
+     'tests/test-korekty.js',
+     "    if (alignY !== null && wolnoY) { target.y = alignY;",
+     "    if (alignY !== null) { target.y = alignY;"),
+
+    ('koniec sciany dociagany w poprzek linii, nie wzdluz',
+     'tests/test-korekty.js',
+     "            cel = { x: od.x + ux * wzdluz, y: od.y + uy * wzdluz };",
+     "            cel = { x: przy.pt.x, y: przy.pt.y };"),
+
+    ('prowadnice blokuja tez wspolrzedna, ktora wolno ruszac',
+     'tests/test-korekty.js',
+     "    const wolnoX = blokada !== 'x' && blokada !== 'oba';",
+     "    const wolnoX = false;"),
+
+    ('strona pasa ignorowana - zawsze na osi',
+     'tests/test-grubosc.js',
+     "    if (s === 'os') return 0;\n    const h = wallThicknessPx(line) / 2;\n    return s === 'prawa' ? h : -h;",
+     "    return 0;"),
+
+    ('lewa i prawa strona zamienione miejscami',
+     'tests/test-grubosc.js',
+     "    return s === 'prawa' ? h : -h;",
+     "    return s === 'prawa' ? -h : h;"),
+
+    ('zasieg pasa na stronie liczony jak dla osi - dziura w narozniku',
+     'tests/test-grubosc.js',
+     "    return wallSideOf(line) === 'os' ? t / 2 : t;",
+     "    return t / 2;"),
 
     ('limit dlugosci sciany 30 m podmieniony na 3 m',
      'tests/test-kontrola.js',

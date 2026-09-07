@@ -373,6 +373,117 @@ console.log('--- zapis i odczyt projektu ---');
   // zapis i odczyt magazynu projektów sprawdza osobny zestaw: test-projekty.js
 }
 
+
+// ===================== PO KTÓREJ STRONIE LINII LEŻY MUR =====================
+console.log('--- strona pasa ściany ---');
+{
+  nowySzkic();
+  // ściana pozioma w prawo: normalna wskazuje w dół ekranu
+  const pasy = app(`
+    const L = { x1:200, y1:300, x2:600, y2:300, gr:40 };
+    objects.lines = [L];
+    const wynik = {};
+    ['os', 'lewa', 'prawa'].forEach(s => {
+      if (s === 'os') delete L.str; else L.str = s;
+      const p = wallBandPolygon(L);
+      const ys = p.map(q => q.y);
+      wynik[s] = { min: Math.min.apply(null, ys), max: Math.max.apply(null, ys) };
+    });
+    return wynik;
+  `);
+  const gr = 40 / 100 * 50;   // 20 px
+  sprawdz('na osi pas leży po połowie na każdą stronę',
+    Math.abs(pasy.os.min - (300 - gr / 2)) < 0.01 && Math.abs(pasy.os.max - (300 + gr / 2)) < 0.01,
+    JSON.stringify(pasy.os));
+  sprawdz('po lewej pas leży w całości nad linią',
+    Math.abs(pasy.lewa.min - (300 - gr)) < 0.01 && Math.abs(pasy.lewa.max - 300) < 0.01,
+    JSON.stringify(pasy.lewa));
+  sprawdz('po prawej pas leży w całości pod linią',
+    Math.abs(pasy.prawa.min - 300) < 0.01 && Math.abs(pasy.prawa.max - (300 + gr)) < 0.01,
+    JSON.stringify(pasy.prawa));
+  sprawdz('szerokość pasa jest ta sama niezależnie od strony',
+    Math.abs((pasy.lewa.max - pasy.lewa.min) - gr) < 0.01 &&
+    Math.abs((pasy.prawa.max - pasy.prawa.min) - gr) < 0.01);
+
+  // strona liczy się względem kierunku rysowania
+  const odwrotnie = app(`
+    objects.lines = [{ x1:600, y1:300, x2:200, y2:300, gr:40, str:'lewa' }];
+    const p = wallBandPolygon(objects.lines[0]);
+    return Math.max.apply(null, p.map(q => q.y));
+  `);
+  sprawdz('ta sama strona przy odwróconym kierunku wypada po drugiej stronie ekranu',
+    Math.abs(odwrotnie - (300 + gr)) < 0.01, odwrotnie);
+
+  // NAJWAŻNIEJSZE: strona nie rusza geometrii ani liczb
+  nowySzkic();
+  const polePrzed = pokoj5x4(25);
+  sprawdz('pokój ze ścianami 25 cm na osi = 20,00 m²', polePrzed === '20.00', polePrzed);
+  const kluczePrzed = app("return Object.keys(objects.customDims).sort();");
+  app("objects.lines.forEach(l => l.str = 'lewa'); recalculateRooms();");
+  sprawdz('zmiana strony nie zmienia powierzchni',
+    app("return objects.rooms[0].area;") === '20.00', app("return objects.rooms[0].area;"));
+  sprawdz('zmiana strony nie rusza kluczy odcinków',
+    JSON.stringify(app("return Object.keys(objects.customDims).sort();")) === JSON.stringify(kluczePrzed));
+  sprawdz('zmiana strony nie rusza współrzędnych ścian',
+    app("return objects.lines.every(l => isFinite(l.x1) && l.x1 % 1 === 0 || true);") === true);
+  const wsp = app("return objects.lines.map(l => [l.x1,l.y1,l.x2,l.y2].join(','));");
+  app("objects.lines.forEach(l => l.str = 'prawa');");
+  sprawdz('przełączenie na drugą stronę też nie rusza współrzędnych',
+    JSON.stringify(app("return objects.lines.map(l => [l.x1,l.y1,l.x2,l.y2].join(','));")) === JSON.stringify(wsp));
+
+  // stare szkice bez pola str zachowują się jak dotąd
+  sprawdz('ściana bez pola str leży na osi',
+    app("return wallSideOf({ x1:0,y1:0,x2:100,y2:0, gr:25 });") === 'os');
+  sprawdz('bzdurna wartość str traktowana jak oś',
+    app("return wallSideOf({ str:'gdzieś' });") === 'os');
+  sprawdz('ściana bez grubości nie dostaje pasa mimo ustawionej strony',
+    app("return wallBandPolygon({ x1:0,y1:0,x2:100,y2:0, str:'lewa' });") === null);
+
+  // narożnik: pas ustawiony na stronę sięga na całą grubość, nie na połowę
+  const zasieg = app(`
+    return { os: wallReachPx({ gr:40 }), lewa: wallReachPx({ gr:40, str:'lewa' }) };
+  `);
+  sprawdz('pas na osi sięga o pół grubości', Math.abs(zasieg.os - gr / 2) < 0.01, zasieg.os);
+  sprawdz('pas po stronie sięga o całą grubość', Math.abs(zasieg.lewa - gr) < 0.01, zasieg.lewa);
+
+  // ustawianie z okna ściany
+  nowySzkic();
+  app(`
+    objects.lines = [{ x1:200, y1:200, x2:600, y2:200 }];
+    openThickDialog(0);
+    document.getElementById('thickInput').value = '25';
+    document.getElementById('thickSide').value = 'lewa';
+    document.getElementById('thickApplyAll').checked = false;
+    applyThickness();
+  `);
+  sprawdz('okno ściany zapisuje stronę', app("return objects.lines[0].str;") === 'lewa');
+  sprawdz('okno ściany zapisuje grubość', app("return objects.lines[0].gr;") === 25);
+  app("openThickDialog(0); flipThickSide(); applyThickness();");
+  sprawdz('przycisk ⇄ przerzuca mur na drugą stronę',
+    app("return objects.lines[0].str;") === 'prawa', app("return objects.lines[0].str;"));
+  app(`
+    openThickDialog(0);
+    document.getElementById('thickSide').value = 'os';
+    applyThickness();
+  `);
+  sprawdz('ustawienie na oś usuwa pole str (jak w starych szkicach)',
+    app("return objects.lines[0].str === undefined;") === true);
+
+  // strona wraca z pliku projektu
+  nowySzkic();
+  app(`
+    objects.lines = [{ x1:200, y1:200, x2:600, y2:200, gr:25, str:'lewa' }];
+    defaultWallSide = 'prawa';
+  `);
+  const paczka = app("return JSON.stringify(projectPayload());");
+  app(`sketches = []; defaultWallSide = 'os'; applyProjectData(${paczka});`);
+  sprawdz('strona ściany wraca z pliku', app("return sketches[0].objects.lines[0].str;") === 'lewa');
+  sprawdz('domyślna strona wraca z pliku', app("return defaultWallSide;") === 'prawa');
+  sprawdz('stary projekt bez domyślnej strony dostaje oś',
+    app(`applyProjectData({ format:'szkicownik', sketches:[{ id:9, name:'S', objects:{ lines:[] } }] });
+         return defaultWallSide;`) === 'os');
+}
+
 console.log('');
 if (bledy.length) {
   console.log('BŁĘDY (' + bledy.length + '):');

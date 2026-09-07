@@ -13,7 +13,11 @@ w środku, skosy poddasza, obszary kreskowane, ołówek, miarka, opisy, komentar
 ze strzałką, szablony gotowych rzutów.
 
 **Ściany z grubością.** Grubość w centymetrach, ściana rysuje się jako
-zakreskowany pas. Domyślną grubość ustawia się polem obok narzędzia
+zakreskowany pas. Pole **Pas** decyduje, po której stronie rysowanej linii ten
+mur leży: na osi (po połowie na każdą stronę), po lewej albo po prawej — licząc
+względem kierunku rysowania, z przyciskiem ⇄ do przerzucenia. Rysując po licu
+wewnętrznym i kładąc pas na zewnątrz, dostajesz powierzchnię w świetle ścian
+wprost, bez przeliczeń. Domyślną grubość ustawia się polem obok narzędzia
 📏 Ściana, pojedynczą ścianę zmienia się narzędziem 🧱 Grubość. Ściana
 o grubości 0 jest cienką linią, tak jak wcześniej.
 
@@ -145,6 +149,17 @@ zamiast 25,00.
 **Węzły scalają się po odległości, nie przez zaokrąglanie do siatki.**
 Zaokrąglanie nie działa — pomieszczenia o pięciu i więcej ścianach czasem się
 nie domykają.
+
+**Narysowana linia jest linią odniesienia.** Wymiary, obrysy, powierzchnie,
+przyciąganie i domykanie narożników liczą się po niej i tylko po niej. Wybór
+strony pasa przesuwa wyłącznie to, co namalowane — geometrii nie rusza, więc
+klucze odcinków zostają te same, a pomiary nie wędrują.
+
+**Prostowanie ma pierwszeństwo przed wszystkim, co przesuwa punkt w poprzek.**
+Zarówno przyciąganie do węzła, jak i prowadnice wyrównujące potrafiły przechylić
+wyprostowaną ścianę: pierwsze o 12 px, drugie o 20. Dociąganie bierze więc
+wyłącznie składową wzdłuż linii, a prowadnice dostają blokadę na współrzędną,
+którą trzyma prostowanie. Niedomknięty narożnik i tak sklei GAP_TOL.
 
 **Powierzchnia liczy się po osiach ścian.** Grubość i dopasowanie rysunku są
 warstwą wizualną i nie mają prawa ruszyć ani jednej liczby w tabeli. Powierzchnia

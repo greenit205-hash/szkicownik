@@ -422,6 +422,83 @@ nowySzkic();
   sprawdz('przy wyłączonym 45° współrzędne są nietknięte',
     Math.abs(bezSnapu.pt.y - (200 + 3 * 50 - 14)) < 1, JSON.stringify(bezSnapu.pt));
 
+  // ŚCIANA POZIOMA MA BYĆ POZIOMA, KROPKA.
+  // Objaw z terenu: ściana rysowana jako pozioma wychodziła lekko ukośna
+  // i nie dało się tego poprawić. Koniec był dociągany do węzła leżącego
+  // OBOK linii, więc przechylał ją o różnicę wysokości.
+  const doWezla = app(`
+    objects.lines = [{ x1:400, y1:100, x2:400, y2:600 }];   // istniejąca ściana pionowa
+    // rysujemy od prawej do lewej, kończąc 10 px pod jej górnym narożnikiem
+    return koniecSciany({ x:700, y:110 }, { x:405, y:108 });
+  `);
+  sprawdz('ściana kończona przy węźle nadal jest zgłaszana jako prosta',
+    doWezla.prosto === true, JSON.stringify(doWezla));
+  sprawdz('ściana kończona przy węźle NIE przechyla się do niego',
+    Math.abs(doWezla.pt.y - 110) < 0.001, JSON.stringify(doWezla.pt));
+  sprawdz('koniec ściany dociąga się wzdłuż linii, do wysokości węzła',
+    Math.abs(doWezla.pt.x - 400) < 0.001, JSON.stringify(doWezla.pt));
+
+  // to samo, gdy koniec wypada blisko ŚCIANY, a nie jej narożnika
+  const doSciany = app(`
+    objects.lines = [{ x1:400, y1:100, x2:400, y2:600 }];
+    return koniecSciany({ x:700, y:350 }, { x:420, y:347 });
+  `);
+  sprawdz('koniec przy ścianie też nie przechyla linii',
+    Math.abs(doSciany.pt.y - 350) < 0.001, JSON.stringify(doSciany.pt));
+  sprawdz('koniec przy ścianie dociąga się do niej wzdłuż linii',
+    Math.abs(doSciany.pt.x - 400) < 0.001, JSON.stringify(doSciany.pt));
+
+  // ściana pionowa ma ten sam przywilej
+  const pionowa = app(`
+    objects.lines = [{ x1:100, y1:400, x2:600, y2:400 }];
+    return koniecSciany({ x:210, y:700 }, { x:208, y:405 });
+  `);
+  sprawdz('ściana pionowa kończona przy ścianie nie przechyla się',
+    Math.abs(pionowa.pt.x - 210) < 0.001, JSON.stringify(pionowa.pt));
+
+  // węzeł DALEKO w poprzek nie ma prawa niczego ruszać
+  const daleko = app(`
+    objects.lines = [{ x1:250, y1:100, x2:250, y2:140 }];
+    return koniecSciany({ x:700, y:300 }, { x:405, y:298 });
+  `);
+  sprawdz('węzeł odległy w poprzek nie skraca ściany',
+    Math.abs(daleko.pt.x - 405) < 0.001 && Math.abs(daleko.pt.y - 300) < 0.001,
+    JSON.stringify(daleko.pt));
+
+  // narożnik i tak się domknie - tym zajmuje się scalanie węzłów przy GAP_TOL
+  const domyka = app(`
+    const P = PIXELS_PER_METER, O = 200;
+    objects.lines = [];
+    objects.lines.push({ x1:O, y1:O, x2:O+5*P, y2:O });
+    objects.lines.push({ x1:O+5*P, y1:O, x2:O+5*P, y2:O+4*P });
+    objects.lines.push({ x1:O+5*P, y1:O+4*P, x2:O, y2:O+4*P });
+    objects.lines.push({ x1:O, y1:O+4*P-9, x2:O, y2:O+3 });   // lewa ściana z luzem na obu końcach
+    const face = findEnclosingFace({ x:O+2.5*P, y:O+2*P });
+    return face ? face.length : 0;
+  `);
+  sprawdz('narożnik z luzem poniżej GAP_TOL nadal się domyka', domyka >= 4, domyka);
+
+  // węzeł leżący OBOK linii (nie na jej przedłużeniu) - najostrzejszy przypadek,
+  // bo to jego przyciąganie przechylało ścianę
+  const wezelObok = app(`
+    objects.lines = [{ x1:300, y1:100, x2:400, y2:100 }];   // krótka ściana kończąca się w (400,100)
+    return koniecSciany({ x:700, y:110 }, { x:405, y:108 });
+  `);
+  sprawdz('węzeł 10 px obok linii nie przechyla ściany',
+    Math.abs(wezelObok.pt.y - 110) < 0.001, JSON.stringify(wezelObok.pt));
+  sprawdz('węzeł 10 px obok linii skraca ścianę do swojego pionu',
+    Math.abs(wezelObok.pt.x - 400) < 0.001, JSON.stringify(wezelObok.pt));
+
+  // prowadnice mają nadal działać w tym kierunku, w którym wolno
+  const prowadnica = app(`
+    objects.lines = [{ x1:400, y1:100, x2:400, y2:140 }];
+    return koniecSciany({ x:700, y:300 }, { x:412, y:298 });
+  `);
+  sprawdz('prowadnica wyrównuje koniec ściany poziomej w poziomie',
+    Math.abs(prowadnica.pt.x - 400) < 0.001, JSON.stringify(prowadnica.pt));
+  sprawdz('prowadnica nie rusza wysokości ściany poziomej',
+    Math.abs(prowadnica.pt.y - 300) < 0.001, JSON.stringify(prowadnica.pt));
+
   // pionowa ściana
   const pion = app(`
     const P = PIXELS_PER_METER, O = 200;
