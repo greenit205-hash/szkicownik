@@ -1,0 +1,14 @@
+{
+  "name": "szkicownik",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Szkicownik rzutów i przekrojów - PWA, jeden plik index.html",
+  "scripts": {
+    "test": "node tests/test-obrysy.js && node tests/test-korekty.js && node tests/test-grubosc.js && node tests/test-kontrola.js && node tests/test-skala.js && node tests/test-projekty.js",
+    "test:mutacje": "python3 tests/mutacje.py"
+  },
+  "devDependencies": {
+    "jsdom": "^24.0.0",
+    "fake-indexeddb": "^6.0.0"
+  }
+}
