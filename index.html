@@ -115,7 +115,8 @@
             <button type="button" id="btnModeHatch" class="btn btn-outline-secondary btn-sm fw-bold" onclick="setMode('hatch')">▨ Kreskowanie</button>
             <button type="button" id="btnModeObstacle" class="btn btn-outline-dark btn-sm fw-bold" onclick="setMode('obstacle')">⬛ Przeszkoda</button>
             <div class="btn-group" role="group">
-                <button type="button" id="btnModeDraw" class="btn btn-outline-primary btn-sm fw-bold" onclick="setMode('draw')">✏️ Ołówek</button>
+                <button type="button" id="btnModeProsta" class="btn btn-outline-danger btn-sm fw-bold" onclick="setMode('prosta')">➖ Linia</button>
+            <button type="button" id="btnModeDraw" class="btn btn-outline-primary btn-sm fw-bold" onclick="setMode('draw')">✏️ Ołówek</button>
                 <div class="d-flex align-items-center bg-white border px-1" id="penColors" style="display:none !important;">
                     <div class="color-btn active" id="color-black" onclick="setPenColor('#212529', this)"></div>
                     <div class="color-btn" id="color-red" onclick="setPenColor('#dc3545', this)"></div>
@@ -145,6 +146,22 @@
               <option value="lewa">po lewej</option>
               <option value="prawa">po prawej</option>
             </select>
+            <label class="small fw-bold text-muted mb-0 text-nowrap ms-1">Kolor:</label>
+            <select id="wallColorSelect" class="form-select form-select-sm" style="width:auto;" onchange="setDefaultWallColor(this.value)"></select>
+          </span>
+          <span class="thick-box" id="prostaBox" title="Zwykła kreska — bez wpływu na wymiary i powierzchnie">
+            <label class="small fw-bold text-muted mb-0 text-nowrap">➖ Linia:</label>
+            <select id="lineColorSelect" class="form-select form-select-sm" style="width:auto;" onchange="setLineColor(this.value)"></select>
+            <select id="lineWidthSelect" class="form-select form-select-sm" style="width:auto;" onchange="setLineWidth(this.value)">
+              <option value="cienka">cienka</option>
+              <option value="srednia" selected>średnia</option>
+              <option value="gruba">gruba</option>
+            </select>
+            <div class="form-check mb-0 ms-1">
+              <input class="form-check-input" type="checkbox" id="lineArrowCheck" onchange="setLineArrow(this.checked)">
+              <label class="form-check-label small fw-bold" for="lineArrowCheck">strzałka</label>
+            </div>
+            <button type="button" id="btnProstujLinie" class="btn btn-sm btn-secondary fw-bold ms-1" onclick="toggleProstujLinie()" title="Prostowanie linii do poziomu, pionu i 45°">📐 Prostuj wł.</button>
           </span>
           <div class="btn-group flex-wrap ms-auto mt-2 mt-md-0">
             <button type="button" id="btnModePan" class="btn btn-outline-success btn-sm fw-bold" onclick="setMode('pan')">✋ Przesuń</button>
@@ -477,6 +494,8 @@
        „Lewa" i „prawa" liczą się względem kierunku rysowania; jeśli mur siadł nie po tej
        stronie, przerzuć go przyciskiem ⇄.</p>
     <input type="number" min="0" max="200" step="1" inputmode="numeric" id="thickInput" class="form-control form-control-sm mb-2 fw-bold" placeholder="np. 25">
+    <label class="small fw-bold text-muted mb-1">Kolor ściany</label>
+    <select id="thickColor" class="form-select form-select-sm mb-2" onchange="onThickColorChange()"></select>
     <label class="small fw-bold text-muted mb-1">Po której stronie linii leży mur</label>
     <div class="d-flex gap-1 mb-2">
       <select id="thickSide" class="form-select form-select-sm">
@@ -525,6 +544,7 @@
     <div class="form-check"><input class="form-check-input" type="checkbox" id="layer_callouts" checked><label class="form-check-label small" for="layer_callouts">Komentarze</label></div>
     <div class="form-check"><input class="form-check-input" type="checkbox" id="layer_noteLines" checked><label class="form-check-label small" for="layer_noteLines">Miarki</label></div>
     <div class="form-check"><input class="form-check-input" type="checkbox" id="layer_freehand" checked><label class="form-check-label small" for="layer_freehand">Ołówek</label></div>
+    <div class="form-check"><input class="form-check-input" type="checkbox" id="layer_proste" checked><label class="form-check-label small" for="layer_proste">Proste linie</label></div>
     <div class="form-check mb-3"><input class="form-check-input" type="checkbox" id="layer_hatches" checked><label class="form-check-label small" for="layer_hatches">Kreskowanie</label></div>
     <div class="d-flex justify-content-between">
       <button type="button" class="btn btn-outline-secondary btn-sm" onclick="resetLayers()">Wszystkie</button>
@@ -577,6 +597,10 @@
   let projectName = 'Projekt bez nazwy';
   let defaultThicknessCm = 0;
   let defaultWallSide = 'os';
+  let defaultWallColor = 'grafit';
+  let defaultLineColor = 'czerwony';
+  let defaultLineWidth = 'srednia';
+  let defaultLineArrow = false;
   let sketches = [];
   let currentSketchIndex = 0;
   let objects = null;
@@ -741,7 +765,7 @@
     ctx.fill();
     ctx.clip();
     // kreskowanie 45 stopni - w ukladzie plotna, wiec skaluje sie razem z zoomem
-    ctx.strokeStyle = 'rgba(44,62,80,0.65)';
+    ctx.strokeStyle = kolorPrzezroczysty(wallColorHex(line), 0.65);
     ctx.lineWidth = 1.2;
     ctx.beginPath();
     const span = maxY - minY;
@@ -758,7 +782,7 @@
     ctx.moveTo(poly[0].x, poly[0].y);
     for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i].x, poly[i].y);
     ctx.closePath();
-    ctx.strokeStyle = '#2c3e50';
+    ctx.strokeStyle = wallColorHex(line);
     ctx.lineWidth = 1.5;
     ctx.lineJoin = 'round';
     ctx.stroke();
@@ -783,6 +807,7 @@
     const l = objects.lines[index];
     document.getElementById('thickInput').value = wallThicknessOf(l) || '';
     document.getElementById('thickSide').value = wallSideOf(l);
+    wypelnijKolory(document.getElementById('thickColor'), (l && l.kolor) || defaultWallColor);
     document.getElementById('thickApplyAll').checked = false;
     document.getElementById('thickOverlay').style.display = 'flex';
   }
@@ -805,14 +830,22 @@
     document.getElementById('thickOverlay').style.display = 'none';
   }
   function setThickPreset(v) { document.getElementById('thickInput').value = v; }
+
+  function onThickColorChange() {
+    const sel = document.getElementById('thickColor');
+    if (sel) sel.style.borderLeft = '10px solid ' + kolorHex(sel.value, KOLOR_SCIANY_DOMYSLNY);
+  }
   function applyThickness() {
     let v = parseFloat(document.getElementById('thickInput').value);
     if (!isFinite(v) || v < 0) v = 0;
     if (v > MAX_THICKNESS_CM) { alert('Grubość ponad ' + MAX_THICKNESS_CM + ' cm wygląda na pomyłkę.'); return; }
     const str = document.getElementById('thickSide').value;
     const strona = STRONY.indexOf(str) === -1 ? 'os' : str;
+    const selK = document.getElementById('thickColor');
+    const kolor = (selK && KOLORY.some(k => k.id === selK.value)) ? selK.value : 'grafit';
     const ustaw = (l) => {
       if (v > 0) l.gr = v; else delete l.gr;
+      if (kolor === 'grafit') delete l.kolor; else l.kolor = kolor;
       // 'os' zapisujemy jako brak pola - stare szkice i tak tak wygladaja
       if (strona === 'os') delete l.str; else l.str = strona;
     };
@@ -821,6 +854,9 @@
     else if (thickLineIndex >= 0 && objects.lines[thickLineIndex]) ustaw(objects.lines[thickLineIndex]);
     defaultThicknessCm = v;
     defaultWallSide = strona;
+    defaultWallColor = kolor;
+    const selW = document.getElementById('wallColorSelect');
+    if (selW) { selW.value = kolor; selW.style.borderLeft = '10px solid ' + kolorHex(kolor, KOLOR_SCIANY_DOMYSLNY); }
     const inp = document.getElementById('wallThicknessInput');
     if (inp) inp.value = v;
     const sel = document.getElementById('wallSideSelect');
@@ -845,6 +881,9 @@
       zapisano: new Date().toISOString(),
       domyslnaGrubosc: defaultThicknessCm,
       domyslnaStrona: defaultWallSide,
+      domyslnyKolorSciany: defaultWallColor,
+      domyslnyKolorLinii: defaultLineColor,
+      domyslnaGruboscLinii: defaultLineWidth,
       sketches: sketches
     };
   }
@@ -855,9 +894,12 @@
     projectName = data.nazwa || 'Projekt bez nazwy';
     defaultThicknessCm = parseFloat(data.domyslnaGrubosc) || 0;
     defaultWallSide = STRONY.indexOf(data.domyslnaStrona) === -1 ? 'os' : data.domyslnaStrona;
+    defaultWallColor = KOLORY.some(k => k.id === data.domyslnyKolorSciany) ? data.domyslnyKolorSciany : 'grafit';
+    defaultLineColor = KOLORY.some(k => k.id === data.domyslnyKolorLinii) ? data.domyslnyKolorLinii : 'czerwony';
+    defaultLineWidth = LINIA_GRUBOSCI.some(g => g.id === data.domyslnaGruboscLinii) ? data.domyslnaGruboscLinii : 'srednia';
     sketches.forEach(sk => {
       const o = sk.objects = sk.objects || {};
-      ['lines', 'freehand', 'labels', 'rooms', 'openings', 'noteLines', 'hatches', 'slopes', 'callouts', 'obstacles']
+      ['lines', 'freehand', 'labels', 'rooms', 'openings', 'noteLines', 'hatches', 'slopes', 'callouts', 'obstacles', 'proste']
         .forEach(k => { if (!Array.isArray(o[k])) o[k] = []; });
       if (!o.customDims) o.customDims = {};
       if (!o.apexDims) o.apexDims = {};
@@ -871,7 +913,7 @@
   function newProjectData() {
     sketches = [{ id: Date.now(), name: 'Szkic 1', kind: 'rzut', height: '',
       objects: { lines: [], freehand: [], labels: [], rooms: [], openings: [], customDims: {},
-                 noteLines: [], apexDims: {}, hatches: [], slopes: [], callouts: [], obstacles: [] },
+                 noteLines: [], apexDims: {}, hatches: [], slopes: [], callouts: [], obstacles: [], proste: [] },
       panX: -750, panY: -750, zoomLevel: 1, showDimensions: true }];
     currentSketchIndex = 0;
     objects = sketches[0].objects;
@@ -1226,7 +1268,7 @@
   }
 
   // Ten sam kolor w wersji przezroczystej - do kreskowania wnetrza.
-  function rgba(hex, alfa) {
+  function kolorPrzezroczysty(hex, alfa) {
     const h = String(hex).replace('#', '');
     const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
     return 'rgba(' + r + ',' + g + ',' + b + ',' + alfa + ')';
@@ -1291,7 +1333,7 @@
       ctx.clip();
       // kreskowanie w drugą stronę niż ściany (\ zamiast /)
       const kolor = obstacleColorHex(o);
-      ctx.strokeStyle = rgba(kolor, 0.75);
+      ctx.strokeStyle = kolorPrzezroczysty(kolor, 0.75);
       ctx.lineWidth = 1.2;
       ctx.beginPath();
       const span = maxY - minY;
@@ -1791,7 +1833,10 @@
   // Narzędzia bez sensu na zdjęciu: ściany, pomieszczenia, otwory, skosy,
   // grubość, dopasowanie skali. Wyłączamy je, zamiast pozwalać budować
   // powierzchnie na perspektywie.
-  const NARZEDZIA_NA_ZDJECIU = ['pan', 'noteline', 'draw', 'text', 'callout', 'hatch', 'erase', 'select'];
+  // Prosta linia jest tu celowo: to zwykla kreska, nie sciana - nie tworzy
+  // pomieszczen ani powierzchni, wiec na zdjeciu jest bezpieczna i przydatna
+  // do zaznaczenia krawedzi, poziomu czy osi.
+  const NARZEDZIA_NA_ZDJECIU = ['pan', 'noteline', 'prosta', 'draw', 'text', 'callout', 'hatch', 'erase', 'select'];
 
   function toolAllowedHere(mode) {
     if (!isPhotoSketch(sketches[currentSketchIndex])) return true;
@@ -1807,6 +1852,166 @@
       if (b) { b.disabled = foto; b.style.opacity = foto ? 0.4 : 1; }
     });
     if (foto && !toolAllowedHere(currentMode)) setMode('noteline');
+  }
+
+  // ================= KOLORY =================
+  //
+  // Wspólna paleta dla ścian i dla prostych linii. Nazwy po polsku, bo pojawiają
+  // się w tabelach i na wydruku. Brak koloru = wartość domyślna, dzięki czemu
+  // szkice zrobione przed tą zmianą wyglądają dokładnie tak jak dotąd.
+  const KOLORY = [
+    { id: 'grafit',       nazwa: 'Grafitowy',    hex: '#2c3e50' },
+    { id: 'czarny',       nazwa: 'Czarny',       hex: '#212529' },
+    { id: 'czerwony',     nazwa: 'Czerwony',     hex: '#b02a37' },
+    { id: 'niebieski',    nazwa: 'Niebieski',    hex: '#0d6efd' },
+    { id: 'zielony',      nazwa: 'Zielony',      hex: '#198754' },
+    { id: 'pomaranczowy', nazwa: 'Pomarańczowy', hex: '#c65102' },
+    { id: 'fioletowy',    nazwa: 'Fioletowy',    hex: '#6f42c1' },
+    { id: 'brazowy',      nazwa: 'Brązowy',      hex: '#8b5a2b' }
+  ];
+
+  const KOLOR_SCIANY_DOMYSLNY = '#2c3e50';
+  const KOLOR_LINII_DOMYSLNY = '#dc3545';
+
+  function kolorHex(id, domyslny) {
+    const w = KOLORY.find(k => k.id === id);
+    return w ? w.hex : domyslny;
+  }
+
+  function kolorNazwa(id) {
+    const w = KOLORY.find(k => k.id === id);
+    return w ? w.nazwa : '—';
+  }
+
+  function wypelnijKolory(sel, wybrany) {
+    if (!sel) return;
+    if (!sel.options.length) {
+      KOLORY.forEach(k => {
+        const o = document.createElement('option');
+        o.value = k.id; o.text = k.nazwa;
+        sel.appendChild(o);
+      });
+    }
+    sel.value = wybrany || KOLORY[0].id;
+    sel.style.borderLeft = '10px solid ' + kolorHex(sel.value, '#2c3e50');
+  }
+
+  // --- kolor ściany ---
+  function wallColorHex(line) {
+    return kolorHex(line && line.kolor, KOLOR_SCIANY_DOMYSLNY);
+  }
+
+  function setDefaultWallColor(val) {
+    defaultWallColor = KOLORY.some(k => k.id === val) ? val : 'grafit';
+    const sel = document.getElementById('wallColorSelect');
+    if (sel) sel.style.borderLeft = '10px solid ' + kolorHex(defaultWallColor, KOLOR_SCIANY_DOMYSLNY);
+    renderCanvas();
+    saveProjectToStorage();
+  }
+
+  // ================= PROSTA LINIA =================
+  //
+  // Zwykła kreska, bez żadnego znaczenia dla obliczeń: nie tworzy ściany, nie
+  // domyka pomieszczeń, nie wchodzi do wymiarowania. Ołówek rysuje odręcznie,
+  // ta linia jest prosta - i dlatego działa również na zdjęciach, gdzie ściany
+  // są wyłączone. Do zaznaczenia krawędzi, poziomu, osi, czegokolwiek.
+  const LINIA_GRUBOSCI = [
+    { id: 'cienka', nazwa: 'Cienka', px: 2 },
+    { id: 'srednia', nazwa: 'Średnia', px: 4 },
+    { id: 'gruba', nazwa: 'Gruba', px: 7 }
+  ];
+
+  function ensureProste() {
+    if (!objects.proste) objects.proste = [];
+    return objects.proste;
+  }
+
+  function prostaColorHex(p) {
+    return kolorHex(p && p.kolor, KOLOR_LINII_DOMYSLNY);
+  }
+
+  function prostaWidthPx(p) {
+    const w = LINIA_GRUBOSCI.find(g => g.id === (p && p.gruba));
+    return w ? w.px : 4;
+  }
+
+  function setLineColor(val) {
+    defaultLineColor = KOLORY.some(k => k.id === val) ? val : 'czerwony';
+    const sel = document.getElementById('lineColorSelect');
+    if (sel) sel.style.borderLeft = '10px solid ' + kolorHex(defaultLineColor, KOLOR_LINII_DOMYSLNY);
+    saveProjectToStorage();
+  }
+
+  function setLineWidth(val) {
+    defaultLineWidth = LINIA_GRUBOSCI.some(g => g.id === val) ? val : 'srednia';
+    saveProjectToStorage();
+  }
+
+  function setLineArrow(on) {
+    defaultLineArrow = !!on;
+    saveProjectToStorage();
+  }
+
+  function drawProste() {
+    (objects.proste || []).forEach(p => {
+      ctx.save();
+      ctx.strokeStyle = prostaColorHex(p);
+      ctx.fillStyle = prostaColorHex(p);
+      ctx.lineWidth = prostaWidthPx(p);
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(p.x1, p.y1); ctx.lineTo(p.x2, p.y2);
+      ctx.stroke();
+      if (p.strzalka) {
+        const kat = Math.atan2(p.y2 - p.y1, p.x2 - p.x1);
+        const d = 6 + prostaWidthPx(p) * 2;
+        ctx.beginPath();
+        ctx.moveTo(p.x2, p.y2);
+        ctx.lineTo(p.x2 - d * Math.cos(kat - 0.4), p.y2 - d * Math.sin(kat - 0.4));
+        ctx.lineTo(p.x2 - d * Math.cos(kat + 0.4), p.y2 - d * Math.sin(kat + 0.4));
+        ctx.closePath(); ctx.fill();
+      }
+      ctx.restore();
+    });
+  }
+
+  function findProstaAt(pos) {
+    const lista = objects.proste || [];
+    const tol = 14 / (zoomLevel || 1);
+    for (let i = lista.length - 1; i >= 0; i--) {
+      const p = lista[i];
+      const q = getClosestPointOnSegment(pos, { x: p.x1, y: p.y1 }, { x: p.x2, y: p.y2 });
+      if (Math.hypot(pos.x - q.x, pos.y - q.y) < tol) return i;
+    }
+    return -1;
+  }
+
+  // Prostowanie działa tak samo jak przy ścianach - poziom, pion i 45 stopni.
+  // Na zdjęciu bywa niepotrzebne (krawędź na fotografii rzadko jest równa),
+  // więc da się je wyłączyć przełącznikiem 📐 Prostuj.
+  let prostujLinie = true;
+  function toggleProstujLinie() {
+    prostujLinie = !prostujLinie;
+    const b = document.getElementById('btnProstujLinie');
+    if (b) {
+      b.classList.toggle('btn-secondary', prostujLinie);
+      b.classList.toggle('btn-outline-secondary', !prostujLinie);
+      b.innerText = prostujLinie ? '📐 Prostuj wł.' : '📐 Prostuj wył.';
+    }
+    saveProjectToStorage();
+  }
+
+  function koniecProstej(od, raw) {
+    if (!prostujLinie) return { x: raw.x, y: raw.y };
+    const kat = Math.atan2(raw.y - od.y, raw.x - od.x) * 180 / Math.PI;
+    if (Math.abs(kat) <= ORTHO_ANGLE_TOLERANCE || Math.abs(kat) >= 180 - ORTHO_ANGLE_TOLERANCE)
+      return { x: raw.x, y: od.y };
+    if (Math.abs(kat - 90) <= ORTHO_ANGLE_TOLERANCE || Math.abs(kat + 90) <= ORTHO_ANGLE_TOLERANCE)
+      return { x: od.x, y: raw.y };
+    for (const c of [45, 135, -45, -135]) {
+      if (Math.abs(kat - c) <= DIAG_ANGLE_TOLERANCE) return naKierunek(od, raw, c);
+    }
+    return { x: raw.x, y: raw.y };
   }
 
   // ================= RYSUNEK W RZECZYWISTEJ SKALI =================
@@ -2480,7 +2685,7 @@
 
   const exportLayers = {
     openings: true, obstacles: true, labels: true, callouts: true,
-    freehand: true, noteLines: true, hatches: true, rooms: true
+    freehand: true, noteLines: true, hatches: true, rooms: true, proste: true
   };
 
   function warstwaWidoczna(nazwa) {
@@ -2722,24 +2927,25 @@
     (obj.rooms||[]).forEach(r => { if (r.manual) prostokat(r.x, r.y, 60, 60); else (r.polygon||[]).forEach(pt => put(pt.x, pt.y)); });
     (obj.hatches||[]).forEach(h => (h.polygon||[]).forEach(pt => put(pt.x, pt.y)));
     (obj.slopes||[]).forEach(s => { put(s.x1, s.y1); put(s.x2, s.y2); });
+    (obj.proste||[]).forEach(s => { put(s.x1, s.y1); put(s.x2, s.y2); });
 
-    // etykiety tekstowe - mierzone wlasnym rozmiarem, nie na oko
-    (obj.labels||[]).forEach(l => {
-      const rozm = parseFloat(l.size) || 20;
-      const w = szerokosc(l.text || '', 'bold ' + rozm + 'px Arial') + 16;
-      prostokat(l.x, l.y, w, rozm + 14);
-    });
-
-    // chmurki - w wersji pierwotnej nie bylo ich tu WCALE, stad ucinanie
-    (obj.callouts||[]).forEach(c => {
-      const linie = String(c.text || '').split('\n');
-      let szer = 0;
-      linie.forEach(t2 => { szer = Math.max(szer, szerokosc(t2, 'bold 15px Arial')); });
-      const w = Math.min(Math.max(szer + 20, 60), 420);
-      const h = linie.length * 20 + 14;
-      prostokat(c.x, c.y, w, h);
-      put(c.tx, c.ty);                    // grot strzalki tez musi sie zmiescic
-    });
+    // Etykiety i chmurki mierzymy DOKLADNIE tak, jak beda narysowane -
+    // przez te same labelBox / calloutBox, razem z lamaniem tekstu na linie.
+    // Kazde osobne liczenie tutaj wczesniej czy pozniej rozjedzie sie z rysunkiem.
+    if (mc) {
+      (obj.labels||[]).forEach(l => {
+        const b = labelBox(mc, l);
+        put(b.lewo, b.gora); put(b.lewo + b.w, b.gora + b.h);
+      });
+      (obj.callouts||[]).forEach(c => {
+        const b = calloutBox(mc, c);
+        put(b.lewo, b.gora); put(b.lewo + b.w, b.gora + b.h);
+        put(c.tx, c.ty);                  // grot strzalki tez musi sie zmiescic
+      });
+    } else {
+      (obj.labels||[]).forEach(l => prostokat(l.x, l.y, 200, 40));
+      (obj.callouts||[]).forEach(c => { prostokat(c.x, c.y, 420, 60); put(c.tx, c.ty); });
+    }
 
     // przeszkody razem z podpisem
     (obj.obstacles||[]).forEach(o => {
@@ -4172,7 +4378,7 @@
 
   function switchSketch(index) {
     if (sketches[currentSketchIndex]) { sketches[currentSketchIndex].panX = panX; sketches[currentSketchIndex].panY = panY; sketches[currentSketchIndex].zoomLevel = zoomLevel; sketches[currentSketchIndex].showDimensions = showDimensions; }
-    currentSketchIndex = index; objects = sketches[index].objects; if(!objects.customDims) objects.customDims = {}; if(!objects.noteLines) objects.noteLines = []; if(!objects.apexDims) objects.apexDims = {}; if(!objects.hatches) objects.hatches = []; if(!objects.slopes) objects.slopes = []; if(!objects.callouts) objects.callouts = []; if(!objects.obstacles) objects.obstacles = [];
+    currentSketchIndex = index; objects = sketches[index].objects; if(!objects.customDims) objects.customDims = {}; if(!objects.noteLines) objects.noteLines = []; if(!objects.apexDims) objects.apexDims = {}; if(!objects.hatches) objects.hatches = []; if(!objects.slopes) objects.slopes = []; if(!objects.callouts) objects.callouts = []; if(!objects.obstacles) objects.obstacles = []; if(!objects.proste) objects.proste = [];
     panX = sketches[index].panX; panY = sketches[index].panY; zoomLevel = sketches[index].zoomLevel;
     showDimensions = (sketches[index].showDimensions !== undefined) ? sketches[index].showDimensions : true;
     syncDimsToggleButton(); syncSketchHeightInput();
@@ -4949,6 +5155,7 @@
     thickness:['btnModeThickness','btn-outline-secondary','btn-secondary'],
     hatch:    ['btnModeHatch',    'btn-outline-secondary','btn-secondary'],
     obstacle: ['btnModeObstacle', 'btn-outline-dark',     'btn-dark'],
+    prosta:   ['btnModeProsta',   'btn-outline-danger',  'btn-danger'],
     roomtag:  ['btnModeRoomTag',  'btn-outline-success', 'btn-success'],
     slope:    ['btnModeSlope',    'btn-outline-danger', 'btn-danger'],
     draw:     ['btnModeDraw',     'btn-outline-primary', 'btn-primary'],
@@ -5231,9 +5438,8 @@
       dimLabelRects.push({ x: b.lewo, y: b.gora, w: b.w, h: b.h });
     });
     (objects.labels || []).forEach(l => {
-      const rozm = parseFloat(l.size) || 20;
-      const w = zmierz(l.text || '', 'bold ' + rozm + 'px Arial') + 16;
-      dimLabelRects.push({ x: l.x - w / 2, y: l.y - (rozm + 14) / 2, w: w, h: rozm + 14 });
+      const b = labelBox(ctx, l);
+      dimLabelRects.push({ x: b.lewo, y: b.gora, w: b.w, h: b.h });
     });
     (objects.obstacles || []).forEach(o => {
       if (!o.label || !(o.polygon || []).length) return;
@@ -5616,6 +5822,16 @@
       ctx.restore();
     }
 
+    if (warstwaWidoczna('proste')) drawProste();
+    if (drawing && currentMode === 'prosta' && startPos && currentPos) {
+      ctx.save();
+      ctx.strokeStyle = kolorHex(defaultLineColor, KOLOR_LINII_DOMYSLNY);
+      ctx.lineWidth = prostaWidthPx({ gruba: defaultLineWidth });
+      ctx.lineCap = 'round'; ctx.globalAlpha = 0.7;
+      ctx.beginPath(); ctx.moveTo(startPos.x, startPos.y); ctx.lineTo(currentPos.x, currentPos.y); ctx.stroke();
+      ctx.restore();
+    }
+
     if(objects.freehand && warstwaWidoczna('freehand')) {
       objects.freehand.forEach(stroke => {
         if(!stroke.path || stroke.path.length === 0) return;
@@ -5629,7 +5845,7 @@
       objects.lines.forEach(line => drawWallBand(line));
       objects.lines.forEach((line) => {
         const gr = wallThicknessOf(line);
-        ctx.beginPath(); ctx.strokeStyle = '#2c3e50'; ctx.lineWidth = gr > 0 ? 2 : 6; ctx.lineCap = 'round'; ctx.moveTo(line.x1, line.y1); ctx.lineTo(line.x2, line.y2); ctx.stroke();
+        ctx.beginPath(); ctx.strokeStyle = wallColorHex(line); ctx.lineWidth = gr > 0 ? 2 : 6; ctx.lineCap = 'round'; ctx.moveTo(line.x1, line.y1); ctx.lineTo(line.x2, line.y2); ctx.stroke();
         if (!dimChainsOn) drawDimensionKoty(line, false);
       });
     }
@@ -5654,15 +5870,12 @@
 
     if(objects.labels && warstwaWidoczna('labels')) {
       objects.labels.forEach((lbl) => {
-        // Tekst moze byc wielolinijkowy - rysujemy linia po linii, a tlo
+        // Tekst lamiemy po slowach, rysujemy linia po linii, a tlo
         // dopasowujemy do najszerszej z nich.
-        const size = lbl.size || 20;
-        const linie = String(lbl.text || '').split('\n');
-        const wys = size * 1.35;
+        const b = labelBox(ctx, lbl);
+        const size = b.size, linie = b.linie, wys = b.wys, szer = b.szer;
         ctx.font = "bold " + size + "px Arial";
         ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        let szer = 0;
-        linie.forEach(t => { szer = Math.max(szer, ctx.measureText(t).width); });
         const blokH = linie.length * wys;
         const gora = lbl.y - blokH / 2;
         if (lbl.box !== false) {
@@ -6686,6 +6899,8 @@
         if (roomHit !== -1) { objects.rooms.splice(roomHit, 1); renderTablesPerSketch(); saveStateToHistory(); renderCanvas(); return; }
         let noteHit = findNoteAt(rawPos);
         if (noteHit !== -1) { objects.noteLines.splice(noteHit, 1); saveStateToHistory(); renderCanvas(); return; }
+        let prostaHit = findProstaAt(rawPos);
+        if (prostaHit !== -1) { objects.proste.splice(prostaHit, 1); saveStateToHistory(); renderCanvas(); return; }
         if(clickedLineIndex !== -1) { objects.lines.splice(clickedLineIndex, 1); recalculateRooms(); renderTablesPerSketch(); saveStateToHistory(); } else {
           let clickedRoom = -1; if(objects.rooms) objects.rooms.forEach((r, idx) => { if(Math.hypot(rawPos.x - r.centroid.x, rawPos.y - r.centroid.y) < 40/zoomLevel) clickedRoom = idx; });
           if(clickedRoom !== -1) { objects.rooms.splice(clickedRoom, 1); renderTablesPerSketch(); saveStateToHistory(); }
@@ -6705,6 +6920,11 @@
     }
 
     if (currentMode === 'hatch') { handleHatchClick(rawPos); return; }
+
+    if (currentMode === 'prosta') {
+      drawing = true; startPos = { x: rawPos.x, y: rawPos.y }; currentPos = { x: rawPos.x, y: rawPos.y };
+      return;
+    }
 
     if (currentMode === 'obstacle') {
       const hit = findObstacleAt(rawPos);
@@ -6803,6 +7023,7 @@
       renderCanvas();
     }
     else if (currentMode === 'obstacle') { currentPos = { x: rawPos.x, y: rawPos.y }; renderCanvas(); }
+    else if (currentMode === 'prosta') { currentPos = koniecProstej(startPos, rawPos); renderCanvas(); }
     else if (currentMode === 'noteline' || currentMode === 'slope') {
       let t = { x: rawPos.x, y: rawPos.y };
       let dx = t.x - startPos.x, dy = t.y - startPos.y;
@@ -6864,6 +7085,17 @@
       renderCanvas();
       return;
     }
+    if (currentMode === 'prosta') {
+      drawing = false;
+      const koniec = koniecProstej(startPos, currentPos);
+      if (Math.hypot(koniec.x - startPos.x, koniec.y - startPos.y) > 6) {
+        ensureProste().push({ x1: startPos.x, y1: startPos.y, x2: koniec.x, y2: koniec.y,
+                              kolor: defaultLineColor, gruba: defaultLineWidth, strzalka: defaultLineArrow });
+        saveStateToHistory();
+      }
+      renderCanvas();
+      return;
+    }
     drawing = false; guideLines = [];
     if(currentMode === 'draw') { objects.freehand.push({color: currentPenColor, path: currentStroke}); currentStroke = []; saveStateToHistory(); renderCanvas(); } 
     else if (currentMode === 'line') {
@@ -6872,6 +7104,8 @@
       if (defaultThicknessCm > 0) newLine.gr = defaultThicknessCm;
       // 'os' zostaje bez pola, zeby stare i nowe szkice wygladaly tak samo
       if (defaultThicknessCm > 0 && defaultWallSide !== 'os') newLine.str = defaultWallSide;
+      // 'grafit' zostaje bez pola - stare i nowe szkice wygladaja tak samo
+      if (defaultWallColor && defaultWallColor !== 'grafit') newLine.kolor = defaultWallColor;
       if(Math.hypot(newLine.x2 - newLine.x1, newLine.y2 - newLine.y1) > 5) {
           let dupe = objects.lines.find(l => linesNearlyOverlap(l, newLine));
           if (dupe) {
@@ -7063,14 +7297,65 @@
   }
 
   // Wymiary chmurki liczymy tak samo przy rysowaniu i przy trafianiu palcem.
+  // Lamanie tekstu po slowach do zadanej szerokosci. Recznie wstawione
+  // zlamania (Enter) sa zachowywane. Slowo dluzsze niz cala linia - dlugi adres,
+  // ciag cyfr - jest dzielone na sile, zeby nie wystawalo poza ramke.
+  function zawinTekst(ctx, tekst, font, maxSzer) {
+    ctx.font = font;
+    const wynik = [];
+    String(tekst || '').split('\n').forEach(akapit => {
+      const slowa = akapit.split(/\s+/).filter(s => s.length);
+      if (!slowa.length) { wynik.push(''); return; }
+      let linia = '';
+      const dopchnij = (s) => {
+        // slowo szersze niz cala linia trzeba przelamac w srodku
+        let reszta = s;
+        while (ctx.measureText(reszta).width > maxSzer && reszta.length > 1) {
+          let i = 1;
+          while (i < reszta.length && ctx.measureText(reszta.slice(0, i + 1)).width <= maxSzer) i++;
+          wynik.push(reszta.slice(0, i));
+          reszta = reszta.slice(i);
+        }
+        return reszta;
+      };
+      slowa.forEach(slowo => {
+        const kandydat = linia ? linia + ' ' + slowo : slowo;
+        if (ctx.measureText(kandydat).width <= maxSzer) { linia = kandydat; return; }
+        if (linia) { wynik.push(linia); linia = ''; }
+        linia = dopchnij(slowo);
+      });
+      wynik.push(linia);
+    });
+    return wynik.length ? wynik : [''];
+  }
+
+  const CALLOUT_MAX_W = 420;   // px - szerokosc chmurki, powyzej ktorej lamiemy tekst
+  const LABEL_MAX_W = 520;     // px - to samo dla napisow 🔤 Txt
+
   function calloutBox(ctx, c) {
-    const linie = String(c.text || '').split('\n');
-    ctx.font = 'bold 15px Arial';
+    const font = 'bold 15px Arial';
+    const linie = zawinTekst(ctx, c.text, font, CALLOUT_MAX_W - 20);
+    ctx.font = font;
     let szer = 0;
     linie.forEach(t => { szer = Math.max(szer, ctx.measureText(t).width); });
-    const w = Math.min(Math.max(szer + 20, 60), 420);
+    const w = Math.min(Math.max(szer + 20, 60), CALLOUT_MAX_W);
     const h = linie.length * 20 + 14;
     return { w, h, linie, lewo: c.x - w / 2, gora: c.y - h / 2 };
+  }
+
+  // Ten sam pomiar dla napisow - uzywany przy rysowaniu, rezerwacji miejsca
+  // i liczeniu granic wydruku.
+  function labelBox(ctx, lbl) {
+    const size = lbl.size || 20;
+    const font = 'bold ' + size + 'px Arial';
+    const linie = zawinTekst(ctx, lbl.text, font, LABEL_MAX_W);
+    ctx.font = font;
+    let szer = 0;
+    linie.forEach(t => { szer = Math.max(szer, ctx.measureText(t).width); });
+    const wys = size * 1.35;
+    const h = linie.length * wys + 8;
+    return { linie, size, wys, szer, w: szer + 12, h: h,
+             lewo: lbl.x - (szer + 12) / 2, gora: lbl.y - h / 2 };
   }
 
   function calloutHit(pos) {

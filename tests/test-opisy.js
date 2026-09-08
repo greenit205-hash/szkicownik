@@ -195,18 +195,19 @@ console.log('--- nic się nie ucina na wydruku ---');
       return c.tx >= b.minX && c.tx <= b.maxX && c.ty >= b.minY && c.ty <= b.maxY;
     `) === true);
 
-  // długi napis po prawej
+  // długi napis po prawej - granice mają objąć DOKŁADNIE to, co zostanie
+  // narysowane, więc liczymy je tym samym pomiarem co rysowanie
   nowySzkic();
   prostokat5x4();
   app("objects.labels = [{ x:1200, y:500, text:'Murek oporowy przy tarasie', size:22, box:true }];");
   sprawdz('długi napis mieści się w granicach w całości',
     app(`
       const b = getSketchBounds(objects);
-      ctx.save(); ctx.font = 'bold 22px Arial';
-      const w = ctx.measureText(objects.labels[0].text).width + 16;
-      ctx.restore();
-      return b.maxX >= 1200 + w / 2 - 0.001;
-    `) === true);
+      const lb = labelBox(ctx, objects.labels[0]);
+      return b.minX <= lb.lewo + 0.001 && b.maxX >= lb.lewo + lb.w - 0.001 &&
+             b.minY <= lb.gora + 0.001 && b.maxY >= lb.gora + lb.h - 0.001;
+    `) === true,
+    JSON.stringify(app("return { b:getSketchBounds(objects), lb:labelBox(ctx, objects.labels[0]) };")));
 
   // podpis przeszkody wystający poza jej obrys
   nowySzkic();
@@ -344,6 +345,95 @@ console.log('--- kolory przeszkód ---');
   const html = doc.getElementById('tablesPerSketchContainer').innerHTML;
   sprawdz('tabela przeszkód ma kolumnę koloru', html.includes('Kolor'), html.includes('Przeszkody'));
   sprawdz('tabela pokazuje nazwę koloru', html.includes('Brązowy') || html.includes('Czerwony'));
+}
+
+
+// ===================== ZAWIJANIE DŁUGICH OPISÓW =====================
+console.log('--- długie opisy w kilku liniach ---');
+{
+  nowySzkic();
+  const dlugi = 'Przenosimy poziom kostki czyli 34cm od cokołu, w tym miejscu murek jest niżej - 52cm od cokołu';
+
+  // chmurka
+  const ch = app(`return calloutBox(ctx, { x:1000, y:1000, tx:1000, ty:1100, text:${JSON.stringify(dlugi)} });`);
+  sprawdz('długi komentarz jest łamany na kilka linii', ch.linie.length > 1, ch.linie.length);
+  sprawdz('chmurka nie przekracza dozwolonej szerokości',
+    ch.w <= app("return CALLOUT_MAX_W;") + 0.001, ch.w);
+  sprawdz('wysokość chmurki rośnie wraz z liczbą linii',
+    ch.h > 20 * ch.linie.length, ch.h);
+  sprawdz('żadna linia chmurki nie wystaje poza ramkę',
+    app(`
+      const b = calloutBox(ctx, { x:1000, y:1000, tx:1000, ty:1100, text:${JSON.stringify(dlugi)} });
+      ctx.save(); ctx.font = 'bold 15px Arial';
+      const zle = b.linie.filter(l => ctx.measureText(l).width > b.w - 19);
+      ctx.restore();
+      return zle.length;
+    `) === 0);
+  sprawdz('cała treść zostaje po złamaniu, nic nie ginie',
+    ch.linie.join(' ').replace(/\s+/g, ' ').trim() === dlugi.replace(/\s+/g, ' ').trim(),
+    ch.linie.join(' '));
+
+  // krótki tekst nadal jedną linią
+  const krotki = app("return calloutBox(ctx, { x:0, y:0, tx:0, ty:0, text:'schody' });");
+  sprawdz('krótki komentarz zostaje w jednej linii', krotki.linie.length === 1, krotki.linie.length);
+  sprawdz('krótki komentarz nie rozdyma chmurki',
+    krotki.w < app("return CALLOUT_MAX_W;"), krotki.w);
+
+  // ręczne złamanie Enterem ma być zachowane
+  const reczne = app("return calloutBox(ctx, { x:0, y:0, tx:0, ty:0, text:'pierwsza\\ndruga' });");
+  sprawdz('ręczne złamanie linii jest zachowane', reczne.linie.length === 2, JSON.stringify(reczne.linie));
+  sprawdz('ręcznie złamane linie mają właściwą treść',
+    reczne.linie[0] === 'pierwsza' && reczne.linie[1] === 'druga', JSON.stringify(reczne.linie));
+
+  // napis 🔤 Txt
+  const lb = app(`return labelBox(ctx, { x:1000, y:1000, text:${JSON.stringify(dlugi)}, size:22, box:true });`);
+  sprawdz('długi napis jest łamany na kilka linii', lb.linie.length > 1, lb.linie.length);
+  sprawdz('napis nie przekracza dozwolonej szerokości',
+    lb.szer <= app("return LABEL_MAX_W;") + 0.001, lb.szer);
+  sprawdz('ramka napisu rośnie wraz z liczbą linii',
+    lb.h > lb.wys * lb.linie.length, lb.h);
+
+  // pojedyncze słowo dłuższe niż cała linia musi zostać przełamane w środku
+  const molo = app(`
+    return zawinTekst(ctx, 'A'.repeat(300), 'bold 22px Arial', 200);
+  `);
+  sprawdz('bardzo długie słowo jest dzielone na siłę', molo.length > 1, molo.length);
+  sprawdz('żaden kawałek długiego słowa nie przekracza szerokości',
+    app(`
+      const l = zawinTekst(ctx, 'A'.repeat(300), 'bold 22px Arial', 200);
+      ctx.save(); ctx.font = 'bold 22px Arial';
+      const zle = l.filter(s => ctx.measureText(s).width > 200.001);
+      ctx.restore();
+      return zle.length;
+    `) === 0);
+  sprawdz('długie słowo nie gubi ani jednego znaku',
+    molo.join('').length === 300, molo.join('').length);
+
+  // pusty tekst nie może wywrócić rysowania
+  sprawdz('pusty tekst daje jedną pustą linię',
+    app("return zawinTekst(ctx, '', 'bold 20px Arial', 200).length;") === 1);
+  sprawdz('brak tekstu nie wywraca pomiaru',
+    app("return labelBox(ctx, { x:0, y:0 }).linie.length;") === 1);
+
+  // złamany napis musi mieścić się w granicach eksportu
+  nowySzkic();
+  app(`objects.labels = [{ x:1000, y:1000, text:${JSON.stringify(dlugi)}, size:22, box:true }];`);
+  sprawdz('złamany napis w całości mieści się w granicach',
+    app(`
+      const b = getSketchBounds(objects);
+      const lb2 = labelBox(ctx, objects.labels[0]);
+      return b.minX <= lb2.lewo + 0.001 && b.maxX >= lb2.lewo + lb2.w - 0.001 &&
+             b.minY <= lb2.gora + 0.001 && b.maxY >= lb2.gora + lb2.h - 0.001;
+    `) === true);
+
+  // i rezerwować miejsce na tyle linii, ile faktycznie zajmuje
+  app("dimLabelRects = []; reserveManualAnnotations();");
+  sprawdz('rezerwacja obejmuje wszystkie linie napisu',
+    app(`
+      const r = dimLabelRects[0];
+      const lb3 = labelBox(ctx, objects.labels[0]);
+      return Math.abs(r.h - lb3.h) < 0.001;
+    `) === true, JSON.stringify(app("return dimLabelRects[0];")));
 }
 
 console.log('');

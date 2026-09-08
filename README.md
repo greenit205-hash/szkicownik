@@ -53,6 +53,16 @@ pomocniczymi z narożników i ukośnymi kreskami zamiast strzałek — tak jak n
 rysunku technicznym. Ma sens przy włączonej skali 1:1, bo dopiero wtedy liczby
 zgadzają się z długością linii pod nimi.
 
+**Kolor ścian.** Osiem kolorów, wybierane polem obok grubości albo per ściana
+w oknie 🧱 Grubość. Kolor obejmuje oś ściany i zakreskowany pas. Domyślny
+grafitowy zapisuje się jako brak pola, więc stare szkice wyglądają jak dotąd.
+
+**Prosta linia (➖).** Zwykła kreska: kolor, grubość, opcjonalna strzałka.
+Prostuje się do poziomu, pionu i 45° — da się to wyłączyć przełącznikiem
+📐 Prostuj. **Nie jest ścianą**: nie tworzy pomieszczeń, nie wchodzi do
+wymiarowania ani do zestawienia ścian. Właśnie dlatego działa również na
+zdjęciach, gdzie ściany są wyłączone — do zaznaczenia krawędzi, poziomu czy osi.
+
 **Przyciąganie do 45° (◺).** Skosy dachu i ścięte narożniki rzadko udaje się
 trafić palcem. Linia prowadzona blisko przekątnej dociąga się do dokładnych 45°,
 z węższą tolerancją niż przy poziomie i pionie (6° zamiast 10°), żeby skosy,
@@ -138,6 +148,7 @@ działa kod, który trafia na urządzenie.
 | `test-korekty.js` | poprawianie tego, co już wstawione, bez cofania całej pracy |
 | `test-grubosc.js` | grubość ścian i zapis/odczyt projektu |
 | `test-kontrola.js` | zakresy, sprzeczności i braki w pomiarach |
+| `test-linie.js` | kolory ścian, prosta linia, linia na zdjęciu |
 | `test-opisy.js` | czytelność podpisów, granice eksportu, kolory przeszkód |
 | `test-zdjecia.js` | zdjęcia, kalibracja, wyłączenie narzędzi rysunkowych |
 | `test-skala.js` | dopasowanie rysunku do wymiarów, przeszkody, tabela przeszkód, powierzchnia w świetle |
@@ -238,7 +249,8 @@ sketches = [{
   panX, panY, zoomLevel, showDimensions,
   photo: { src, w, h, opis, skalaPxNaM },          // tylko przy kind: 'zdjecie'
   objects: {
-    lines:     [{x1, y1, x2, y2, gr}],           // gr w cm, brak = cienka linia
+    lines:     [{x1, y1, x2, y2, gr, str, kolor}],        // gr w cm, brak = cienka linia
+    proste:    [{x1, y1, x2, y2, kolor, gruba, strzalka}], // zwykłe kreski, bez wpływu na obliczenia
     rooms:     [{id, num, name, polygon, area, centroid, _spans}],
     openings:  [{x, y, angle, id, width, height}],        // wymiary w cm
     obstacles: [{id, polygon, label, subtract, w, d}],     // w/d w cm

@@ -224,25 +224,25 @@ MUTACJE = [
      "    reserveManualAnnotations();\n    drawPhotoBackground();",
      "    drawPhotoBackground();"),
 
-    ('podpisy mierzone na oko zamiast fontem',
+    ('rezerwacja miejsca dla napisow liczona na oko',
      'tests/test-opisy.js',
-     "      const w = zmierz(l.text || '', 'bold ' + rozm + 'px Arial') + 16;",
-     "      const w = 60;"),
+     "      const b = labelBox(ctx, l);\n      dimLabelRects.push({ x: b.lewo, y: b.gora, w: b.w, h: b.h });",
+     "      dimLabelRects.push({ x: l.x - 30, y: l.y - 10, w: 60, h: 20 });"),
 
     ('chmurki poza granicami eksportu - ucinaja sie na wydruku',
      'tests/test-opisy.js',
-     "    (obj.callouts||[]).forEach(c => {",
-     "    [].forEach(c => {"),
+     "      (obj.callouts||[]).forEach(c => {\n        const b = calloutBox(mc, c);",
+     "      [].forEach(c => {\n        const b = calloutBox(mc, c);"),
 
     ('podpisy przeszkod poza granicami eksportu',
      'tests/test-opisy.js',
      "        prostokat(cx, cy, szerokosc(o.label, 'bold 13px Arial') + 14, 24);",
      "        prostokat(cx, cy, 0, 0);"),
 
-    ('etykiety mierzone stalym marginesem, jak przed poprawka',
+    ('tekst chmurki lamany do zlej szerokosci - wylewa sie poza ramke',
      'tests/test-opisy.js',
-     "      const w = szerokosc(l.text || '', 'bold ' + rozm + 'px Arial') + 16;\n      prostokat(l.x, l.y, w, rozm + 14);",
-     "      prostokat(l.x, l.y, 200, 40);"),
+     "    const linie = zawinTekst(ctx, c.text, font, CALLOUT_MAX_W - 20);",
+     "    const linie = zawinTekst(ctx, c.text, font, CALLOUT_MAX_W * 5);"),
 
     ('kolor przeszkody ignorowany',
      'tests/test-opisy.js',
@@ -253,6 +253,81 @@ MUTACJE = [
      'tests/test-opisy.js',
      "      o.label = label; o.subtract = subtract; o.kolor = kolor;",
      "      o.label = label; o.subtract = subtract;"),
+
+    ('dlugi tekst nie jest lamany - wychodzi poza ekran',
+     'tests/test-opisy.js',
+     "        if (ctx.measureText(kandydat).width <= maxSzer) { linia = kandydat; return; }",
+     "        { linia = kandydat; return; }"),
+
+    ('dlugie slowo nie jest przelamywane w srodku',
+     'tests/test-opisy.js',
+     "        while (ctx.measureText(reszta).width > maxSzer && reszta.length > 1) {",
+     "        while (false) {"),
+
+    ('wysokosc chmurki nie rosnie wraz z liczba linii',
+     'tests/test-opisy.js',
+     "    const h = linie.length * 20 + 14;\n    return { w, h, linie, lewo: c.x - w / 2, gora: c.y - h / 2 };",
+     "    const h = 34;\n    return { w, h, linie, lewo: c.x - w / 2, gora: c.y - h / 2 };"),
+
+    ('granice eksportu liczone inaczej niz rysowanie napisow',
+     'tests/test-opisy.js',
+     "        const b = labelBox(mc, l);\n        put(b.lewo, b.gora); put(b.lewo + b.w, b.gora + b.h);",
+     "        put(l.x - 30, l.y - 10); put(l.x + 30, l.y + 10);"),
+
+    ('reczne zlamania Enterem sa gubione',
+     'tests/test-opisy.js',
+     "    String(tekst || '').split('\\n').forEach(akapit => {",
+     "    [String(tekst || '').replace(/\\n/g, ' ')].forEach(akapit => {"),
+
+    ('kolor sciany ignorowany - wszystkie grafitowe',
+     'tests/test-linie.js',
+     "  function wallColorHex(line) {\n    return kolorHex(line && line.kolor, KOLOR_SCIANY_DOMYSLNY);",
+     "  function wallColorHex(line) {\n    return KOLOR_SCIANY_DOMYSLNY;\n    return kolorHex(line && line.kolor, KOLOR_SCIANY_DOMYSLNY);"),
+
+    ('nowa sciana nie dziedziczy koloru z paska',
+     'tests/test-linie.js',
+     "      if (defaultWallColor && defaultWallColor !== 'grafit') newLine.kolor = defaultWallColor;",
+     "      // brak dziedziczenia"),
+
+    ('kolor sciany nie zapisuje sie z okna',
+     'tests/test-linie.js',
+     "      if (kolor === 'grafit') delete l.kolor; else l.kolor = kolor;",
+     "      // brak zapisu koloru"),
+
+    ('prosta linia nie jest prostowana',
+     'tests/test-linie.js',
+     "    if (!prostujLinie) return { x: raw.x, y: raw.y };",
+     "    return { x: raw.x, y: raw.y };"),
+
+    ('prosta linia zapisywana jako sciana',
+     'tests/test-linie.js',
+     "        ensureProste().push({ x1: startPos.x, y1: startPos.y, x2: koniec.x, y2: koniec.y,",
+     "        objects.lines.push({ x1: startPos.x, y1: startPos.y, x2: koniec.x, y2: koniec.y }); ensureProste().push({ x1: startPos.x, y1: startPos.y, x2: koniec.x, y2: koniec.y,"),
+
+    ('kolor prostej linii ignorowany',
+     'tests/test-linie.js',
+     "    return kolorHex(p && p.kolor, KOLOR_LINII_DOMYSLNY);",
+     "    return KOLOR_LINII_DOMYSLNY;"),
+
+    ('grubosc prostej linii ignorowana',
+     'tests/test-linie.js',
+     "    const w = LINIA_GRUBOSCI.find(g => g.id === (p && p.gruba));\n    return w ? w.px : 4;",
+     "    return 4;"),
+
+    ('prosta linia zablokowana na zdjeciu',
+     'tests/test-linie.js',
+     "'pan', 'noteline', 'prosta', 'draw'",
+     "'pan', 'noteline', 'draw'"),
+
+    ('proste linie poza granicami eksportu',
+     'tests/test-linie.js',
+     "    (obj.proste||[]).forEach(s => { put(s.x1, s.y1); put(s.x2, s.y2); });",
+     "    [].forEach(s => { put(s.x1, s.y1); put(s.x2, s.y2); });"),
+
+    ('przypadkowe dotkniecie tworzy linie',
+     'tests/test-linie.js',
+     "      if (Math.hypot(koniec.x - startPos.x, koniec.y - startPos.y) > 6) {",
+     "      if (true) {"),
 
     ('limit dlugosci sciany 30 m podmieniony na 3 m',
      'tests/test-kontrola.js',
