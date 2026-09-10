@@ -471,13 +471,30 @@
       <option value="DZ">Drzwi Zewnętrzne (DZ)</option>
       <option value="DW">Drzwi Wewnętrzne (DW)</option>
       <option value="OPZ">Okna Połaciowe (OPZ)</option>
+      <option value="OB">Otwór budowlany — przerwa w ścianie (OB)</option>
     </select>
+    <div class="alert alert-success py-1 px-2 small mb-2" id="openingObInfo" style="display:none;">
+      <b>Otwór budowlany</b> robi prawdziwą przerwę w ścianie. Dwa pomieszczenia połączone
+      takim otworem liczą się jako <b>jedna powierzchnia</b>. Wysokości nie podajesz.
+    </div>
     <input type="text" id="openingIdInput" class="form-control form-control-sm mb-2" placeholder="Identyfikator" onkeyup="checkOpeningMemory()">
     <div class="row mb-2">
       <div class="col-6"><input type="number" id="openingWidth" class="form-control form-control-sm" placeholder="Szer. (cm)" oninput="checkOpeningDuplicate()"></div>
       <div class="col-6"><input type="number" id="openingHeight" class="form-control form-control-sm" placeholder="Wys. (cm)" oninput="checkOpeningDuplicate()"></div>
     </div>
     <div class="small mb-2" id="openingDupWarn" style="display:none; color:#fd7e14;"></div>
+    <div class="form-check mb-1">
+      <input class="form-check-input" type="checkbox" id="openingCornerOn" onchange="onOpeningCornerToggle()">
+      <label class="form-check-label small fw-bold" for="openingCornerOn">Ustaw w zadanej odległości od narożnika</label>
+    </div>
+    <div class="d-flex gap-2 mb-1" id="openingCornerBox" style="display:none;">
+      <select id="openingCornerSide" class="form-select form-select-sm" style="max-width:160px;">
+        <option value="lewa">od lewego narożnika</option>
+        <option value="prawa">od prawego narożnika</option>
+      </select>
+      <input type="number" min="0" step="1" inputmode="numeric" id="openingCornerDist" class="form-control form-control-sm" placeholder="odległość (cm)">
+    </div>
+    <div class="small text-muted mb-2" id="openingCornerHint"></div>
     <div class="d-flex justify-content-between align-items-center">
       <button type="button" class="btn btn-secondary btn-sm" onclick="closeOpeningDialog()">Anuluj</button>
       <button type="button" class="btn btn-outline-danger btn-sm fw-bold" id="openingDeleteBtn" style="display:none;" onclick="deleteOpeningFromDialog()">🗑️ Usuń</button>
@@ -728,20 +745,27 @@
 
   // Czworokat pasa sciany: srodek pasa przesuniety wzgledem linii o tyle,
   // ile kaze wybrana strona, z nadmiarem na koncach (patrz wyzej).
-  function wallBandPolygon(line) {
+  // `kawalek` to fragment sciany do narysowania - rozny od calej sciany tam,
+  // gdzie otwor budowlany wycial z niej przerwe. Nadmiar na naroznik dokladamy
+  // tylko na koncach, ktore naprawde sa koncami sciany; przy krawedzi otworu
+  // pas ma sie urwac rowno, bo tam zaczyna sie oscieze.
+  function wallBandPolygon(line, kawalek) {
     const t = wallThicknessPx(line);
     if (t <= 0) return null;
-    const dx = line.x2 - line.x1, dy = line.y2 - line.y1;
+    const czesc = kawalek || line;
+    const koniecSciany = (x, y) =>
+      Math.hypot(x - line.x1, y - line.y1) < 0.5 || Math.hypot(x - line.x2, y - line.y2) < 0.5;
+    const dx = czesc.x2 - czesc.x1, dy = czesc.y2 - czesc.y1;
     const len = Math.hypot(dx, dy);
     if (len < 0.001) return null;
     const ux = dx / len, uy = dy / len;
     const nx = -uy, ny = ux;
     const h = t / 2;
     const o = wallBandOffsetPx(line);
-    const e1 = cornerOvershoot(line, line.x1, line.y1);
-    const e2 = cornerOvershoot(line, line.x2, line.y2);
-    const ax = line.x1 - ux * e1 + nx * o, ay = line.y1 - uy * e1 + ny * o;
-    const bx = line.x2 + ux * e2 + nx * o, by = line.y2 + uy * e2 + ny * o;
+    const e1 = koniecSciany(czesc.x1, czesc.y1) ? cornerOvershoot(line, czesc.x1, czesc.y1) : 0;
+    const e2 = koniecSciany(czesc.x2, czesc.y2) ? cornerOvershoot(line, czesc.x2, czesc.y2) : 0;
+    const ax = czesc.x1 - ux * e1 + nx * o, ay = czesc.y1 - uy * e1 + ny * o;
+    const bx = czesc.x2 + ux * e2 + nx * o, by = czesc.y2 + uy * e2 + ny * o;
     return [
       { x: ax + nx * h, y: ay + ny * h },
       { x: bx + nx * h, y: by + ny * h },
@@ -750,8 +774,8 @@
     ];
   }
 
-  function drawWallBand(line) {
-    const poly = wallBandPolygon(line);
+  function drawWallBand(line, kawalek) {
+    const poly = wallBandPolygon(line, kawalek);
     if (!poly) return;
     const xs = poly.map(p => p.x), ys = poly.map(p => p.y);
     const minX = Math.min.apply(null, xs), maxX = Math.max.apply(null, xs);
@@ -2025,6 +2049,291 @@
       if (Math.abs(kat - c) <= DIAG_ANGLE_TOLERANCE) return naKierunek(od, raw, c);
     }
     return { x: raw.x, y: raw.y };
+  }
+
+  // ================= OTWORY =================
+  //
+  // Cztery rodzaje, z których jeden zachowuje się inaczej niż pozostałe:
+  //
+  //   okno       symbol w ścianie, ściana zostaje ciągła
+  //   drzwi      to samo, inny symbol i kolor
+  //   drzwiWew   drzwi wewnętrzne - ściana zostaje ciągła
+  //   przejscie  OTWÓR BUDOWLANY: robi prawdziwą przerwę w ścianie
+  //
+  // Przejście jest wycinane ze ściany także w grafie, z którego liczą się
+  // obrysy pomieszczeń. Skutek jest taki, jaki ma być: dwa pomieszczenia
+  // połączone otworem budowlanym przestają być dwoma obrysami i liczą się
+  // jako jedna powierzchnia. Nie ma tu żadnego „sklejania pokoi" - po prostu
+  // ściana w tym miejscu nie istnieje, więc nie ma czego rozdzielać.
+
+  // Prefiksy zgodne z listą, która była w programie od początku (OPENING_CATS),
+  // plus nowy OB. Dzięki temu istniejące oznaczenia nie zmieniają znaczenia.
+  const OPENING_TYPES = {
+    okno:      { nazwa: 'Okno',              prefix: 'O',   kolor: '#0dcaf0', wymiary: true },
+    oknoPol:   { nazwa: 'Okno połaciowe',    prefix: 'OPZ', kolor: '#0aa2c0', wymiary: true },
+    drzwi:     { nazwa: 'Drzwi zewnętrzne',  prefix: 'DZ',  kolor: '#a0522d', wymiary: true },
+    drzwiWew:  { nazwa: 'Drzwi wewnętrzne',  prefix: 'DW',  kolor: '#8b5a2b', wymiary: true },
+    przejscie: { nazwa: 'Otwór budowlany',   prefix: 'OB',  kolor: '#198754', wymiary: false }
+  };
+
+  const PRZEJSCIE_MIN_CM = 40;   // węższa przerwa zlepi się z powrotem przy scalaniu węzłów
+
+  // Stare szkice nie mają pola `typ` - rodzaj odczytujemy z oznaczenia,
+  // tak jak wyglądał on przed tą zmianą.
+  function typOtworu(op) {
+    if (op && OPENING_TYPES[op.typ]) return op.typ;
+    const id = String((op && op.id) || '').toUpperCase();
+    // najdluzszy pasujacy prefiks wygrywa, zeby "DZ1" nie wpadlo do "D"
+    if (id.indexOf('OPZ') === 0) return 'oknoPol';
+    if (id.indexOf('OB') === 0) return 'przejscie';
+    if (id.indexOf('DZ') === 0) return 'drzwi';
+    if (id.indexOf('DW') === 0) return 'drzwiWew';
+    if (id.indexOf('D') === 0) return 'drzwi';
+    return 'okno';
+  }
+
+  function isPrzejscie(op) { return typOtworu(op) === 'przejscie'; }
+  function openingColor(op) { return OPENING_TYPES[typOtworu(op)].kolor; }
+  function openingTypeName(op) { return OPENING_TYPES[typOtworu(op)].nazwa; }
+  function openingWidthPx(op) { return (parseFloat(op.width) || 0) / 100 * PIXELS_PER_METER; }
+
+  // Ściana, na której siedzi otwór.
+  function hostLineIndex(op) {
+    let best = -1, bestD = 40;
+    (objects.lines || []).forEach((l, i) => {
+      const p = getClosestPointOnSegment({ x: op.x, y: op.y }, { x: l.x1, y: l.y1 }, { x: l.x2, y: l.y2 });
+      const d = Math.hypot(op.x - p.x, op.y - p.y);
+      if (d < bestD) { bestD = d; best = i; }
+    });
+    return best;
+  }
+
+  // Który koniec ściany nazywamy „lewym". Bierzemy go z POŁOŻENIA NA EKRANIE,
+  // nie z kolejności rysowania - inaczej ta sama ściana narysowana w drugą
+  // stronę zamieniałaby lewy narożnik z prawym i wymiar wędrowałby przez pół
+  // pomieszczenia. Dla ścian pionowych „lewy" to górny.
+  function wallCorners(line) {
+    const a = { x: line.x1, y: line.y1 }, b = { x: line.x2, y: line.y2 };
+    const pionowa = Math.abs(b.x - a.x) < Math.abs(b.y - a.y);
+    const aPierwszy = pionowa ? (a.y <= b.y) : (a.x <= b.x);
+    return aPierwszy ? { lewy: a, prawy: b } : { lewy: b, prawy: a };
+  }
+
+  // Ustawienie otworu w zadanej odległości od narożnika.
+  // Odległość mierzymy do KRAWĘDZI otworu, nie do jego środka - tak podaje się
+  // ją na budowie i tak zmierzy ją dalmierz przyłożony do narożnika.
+  function positionFromCorner(op, line) {
+    const dyst = parseFloat(op.odKrawedzi && op.odKrawedzi.dystans);
+    if (!isFinite(dyst) || dyst < 0) return null;
+    const rogi = wallCorners(line);
+    const od = (op.odKrawedzi.strona === 'prawa') ? rogi.prawy : rogi.lewy;
+    const doo = (op.odKrawedzi.strona === 'prawa') ? rogi.lewy : rogi.prawy;
+    const len = Math.hypot(doo.x - od.x, doo.y - od.y);
+    if (len < 1) return null;
+    const ux = (doo.x - od.x) / len, uy = (doo.y - od.y) / len;
+    const wPx = openingWidthPx(op);
+    const dystPx = dyst / 100 * PIXELS_PER_METER;
+    const srodek = dystPx + wPx / 2;
+    return {
+      x: od.x + ux * srodek,
+      y: od.y + uy * srodek,
+      angle: Math.atan2(line.y2 - line.y1, line.x2 - line.x1),
+      miesciSie: srodek + wPx / 2 <= len + 0.5
+    };
+  }
+
+  // Przeliczenie położenia wszystkich otworów opisanych odległością od narożnika.
+  // Wołane po zmianie wymiarów i po dociągnięciu rysunku - inaczej otwór
+  // zostawałby w starym miejscu, mimo że ściana się przesunęła.
+  function refreshCornerOpenings() {
+    (objects.openings || []).forEach(op => {
+      if (!op.odKrawedzi) return;
+      const li = hostLineIndex(op);
+      if (li === -1) return;
+      const poz = positionFromCorner(op, objects.lines[li]);
+      if (!poz) return;
+      op.x = poz.x; op.y = poz.y; op.angle = poz.angle;
+    });
+  }
+
+  // --- przerwa w ścianie ---
+
+  // Przedziały wzdłuż ściany zajęte przez otwory budowlane, w pikselach
+  // liczonych od punktu (x1,y1) danej ściany.
+  function przejsciaNaScianie(line) {
+    const len = Math.hypot(line.x2 - line.x1, line.y2 - line.y1);
+    if (len < 1) return [];
+    const ux = (line.x2 - line.x1) / len, uy = (line.y2 - line.y1) / len;
+    const wynik = [];
+    (objects.openings || []).forEach(op => {
+      if (!isPrzejscie(op)) return;
+      const p = getClosestPointOnSegment({ x: op.x, y: op.y },
+                                         { x: line.x1, y: line.y1 }, { x: line.x2, y: line.y2 });
+      if (Math.hypot(op.x - p.x, op.y - p.y) > 40) return;   // otwór nie należy do tej ściany
+      const t = (p.x - line.x1) * ux + (p.y - line.y1) * uy;
+      const w = openingWidthPx(op);
+      wynik.push({ od: t - w / 2, do: t + w / 2 });
+    });
+    return wynik.sort((a, b) => a.od - b.od);
+  }
+
+  // Kawałki odcinka, które zostają po wycięciu przejść.
+  // Zwraca listę odcinków - pustą, gdy przejście pochłonęło całą ścianę.
+  function odcinkiBezPrzejsc(seg, line) {
+    const przej = przejsciaNaScianie(line);
+    if (!przej.length) return [seg];
+    const len = Math.hypot(line.x2 - line.x1, line.y2 - line.y1);
+    if (len < 1) return [seg];
+    const ux = (line.x2 - line.x1) / len, uy = (line.y2 - line.y1) / len;
+    const na = (p) => (p.x - line.x1) * ux + (p.y - line.y1) * uy;
+    const punkt = (t) => ({ x: line.x1 + ux * t, y: line.y1 + uy * t });
+
+    let t1 = na({ x: seg.x1, y: seg.y1 }), t2 = na({ x: seg.x2, y: seg.y2 });
+    const odwrocony = t1 > t2;
+    if (odwrocony) { const p = t1; t1 = t2; t2 = p; }
+
+    const kawalki = [];
+    let kursor = t1;
+    przej.forEach(p => {
+      if (p.do <= kursor || p.od >= t2) return;
+      if (p.od > kursor) kawalki.push({ a: kursor, b: Math.min(p.od, t2) });
+      kursor = Math.max(kursor, p.do);
+    });
+    if (kursor < t2) kawalki.push({ a: kursor, b: t2 });
+
+    return kawalki
+      .filter(k => k.b - k.a > 1)
+      .map(k => {
+        const A = punkt(odwrocony ? k.b : k.a), B = punkt(odwrocony ? k.a : k.b);
+        return { x1: A.x, y1: A.y, x2: B.x, y2: B.y };
+      });
+  }
+
+  // --- rysowanie ---
+
+  function drawOpeningSymbol(op) {
+    const typ = typOtworu(op);
+    const meta = OPENING_TYPES[typ];
+    const wPx = openingWidthPx(op);
+    const kolor = meta.kolor;
+
+    ctx.save();
+    ctx.translate(op.x, op.y);
+    ctx.rotate(op.angle || 0);
+
+    if (typ === 'przejscie') {
+      // otwór budowlany: sama przerwa i dwie kreski oznaczające ościeża
+      ctx.strokeStyle = kolor; ctx.lineWidth = 3; ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(-wPx / 2, -9); ctx.lineTo(-wPx / 2, 9);
+      ctx.moveTo(wPx / 2, -9);  ctx.lineTo(wPx / 2, 9);
+      ctx.stroke();
+      ctx.setLineDash([5, 5]); ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(-wPx / 2, 0); ctx.lineTo(wPx / 2, 0); ctx.stroke();
+      ctx.setLineDash([]);
+    } else {
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(-wPx / 2, -8, wPx, 16);
+      ctx.strokeStyle = kolor; ctx.lineWidth = 2;
+      ctx.strokeRect(-wPx / 2, -6, wPx, 12);
+      if (typ === 'drzwi' || typ === 'drzwiWew') {
+        // skrzydło: ćwiartka koła, czyli jak na rysunku budowlanym
+        ctx.beginPath();
+        ctx.moveTo(-wPx / 2, 0);
+        ctx.arc(-wPx / 2, 0, wPx, 0, -Math.PI / 2, true);
+        ctx.strokeStyle = kolor;
+        ctx.lineWidth = typ === 'drzwiWew' ? 1 : 1.5;
+        if (typ === 'drzwiWew') ctx.setLineDash([4, 4]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
+    ctx.restore();
+
+    // podpis: oznaczenie, a pod nim wymiary
+    ctx.save();
+    ctx.font = 'bold 13px Arial';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const wiersze = [String(op.id || '')];
+    if (meta.wymiary && op.width && op.height) {
+      wiersze.push(op.width + '×' + op.height + ' cm');
+    } else if (typ === 'przejscie' && op.width) {
+      wiersze.push('szer. ' + op.width + ' cm');
+    }
+    let szer = 0;
+    wiersze.forEach(t => { szer = Math.max(szer, ctx.measureText(t).width); });
+    const h = wiersze.length * 16 + 6;
+    const spot = (typeof findFreeLabelSpot === 'function')
+      ? findFreeLabelSpot(op.x, op.y - 26, szer + 10, h, 0, -1)
+      : { x: op.x, y: op.y - 26 };
+    const cx = spot ? spot.x : op.x, cy = spot ? spot.y : op.y - 26;
+    ctx.fillStyle = 'rgba(255,255,255,0.88)';
+    ctx.fillRect(cx - (szer + 10) / 2, cy - h / 2, szer + 10, h);
+    ctx.fillStyle = kolor;
+    wiersze.forEach((t, i) => ctx.fillText(t, cx, cy - h / 2 + 16 * i + 11));
+    if (typeof reserveLabelRect === 'function') reserveLabelRect(cx, cy, szer + 10, h);
+    ctx.restore();
+  }
+
+  // Automatyczne oznaczenie dla nowego otworu - osobna numeracja dla każdego rodzaju.
+  function nextOpeningId(typ) {
+    const prefix = OPENING_TYPES[typ] ? OPENING_TYPES[typ].prefix : 'O';
+    let max = 0;
+    sketches.forEach(sk => (sk.objects.openings || []).forEach(op => {
+      const m = new RegExp('^' + prefix + '(\\d+)$', 'i').exec(String(op.id || ''));
+      if (m && typOtworu(op) === typ) max = Math.max(max, parseInt(m[1], 10));
+    }));
+    return prefix + (max + 1);
+  }
+
+  // --- okno dialogowe: odległość od narożnika ---
+
+  function odczytajOdKrawedzi() {
+    const chk = document.getElementById('openingCornerOn');
+    if (!chk || !chk.checked) return null;
+    const d = parseFloat(String(document.getElementById('openingCornerDist').value).replace(',', '.'));
+    if (!isFinite(d) || d < 0) return null;
+    const strona = document.getElementById('openingCornerSide').value === 'prawa' ? 'prawa' : 'lewa';
+    return { strona: strona, dystans: d };
+  }
+
+  // Ustawienie otworu na ścianie zgodnie z podaną odległością.
+  // Gdy otwór by się nie zmieścił, mówimy o tym wprost zamiast wypychać go
+  // poza ścianę i zostawiać użytkownika z rysunkiem, który nie ma sensu.
+  function ustawZOdleglosci(op) {
+    if (!op || !op.odKrawedzi) return;
+    const li = hostLineIndex(op);
+    if (li === -1) return;
+    const poz = positionFromCorner(op, objects.lines[li]);
+    if (!poz) return;
+    if (!poz.miesciSie) {
+      alert('Ten otwór nie mieści się na ścianie przy podanej odległości od narożnika.\n' +
+            'Sprawdź szerokość i odległość — otwór został ustawiony tam, gdzie go wskazałeś.');
+      delete op.odKrawedzi;
+      return;
+    }
+    op.x = poz.x; op.y = poz.y; op.angle = poz.angle;
+  }
+
+  function onOpeningCornerToggle() {
+    const on = document.getElementById('openingCornerOn').checked;
+    document.getElementById('openingCornerBox').style.display = on ? 'flex' : 'none';
+  }
+
+  // Podpowiedź: gdy otwór już stoi na ścianie, pokazujemy jego faktyczną
+  // odległość od obu narożników - często wystarczy ją tylko zaokrąglić.
+  function odlegloscOdNaroznikow(op) {
+    const li = hostLineIndex(op);
+    if (li === -1) return null;
+    const line = objects.lines[li];
+    const rogi = wallCorners(line);
+    const wPx = openingWidthPx(op);
+    const doLewego = Math.hypot(op.x - rogi.lewy.x, op.y - rogi.lewy.y) - wPx / 2;
+    const doPrawego = Math.hypot(op.x - rogi.prawy.x, op.y - rogi.prawy.y) - wPx / 2;
+    return {
+      lewa: Math.max(0, doLewego) / PIXELS_PER_METER * 100,
+      prawa: Math.max(0, doPrawego) / PIXELS_PER_METER * 100
+    };
   }
 
   // ================= WYMIAR OD RAZU PO NARYSOWANIU =================
@@ -5336,7 +5645,8 @@
     { pref: 'OPZ', name: 'Okna połaciowe' },
     { pref: 'DZ',  name: 'Drzwi zewnętrzne' },
     { pref: 'DW',  name: 'Drzwi wewnętrzne' },
-    { pref: 'O',   name: 'Okna' }
+    { pref: 'O',   name: 'Okna' },
+    { pref: 'OB',  name: 'Otwory budowlane' }
   ];
 
   // Dopasowanie ID do kategorii - najdluzszy pasujacy prefiks wygrywa,
@@ -5449,6 +5759,17 @@
 
   // Otwiera okno wypelnione danymi istniejacego otworu. Pozycja i kat zostaja
   // bez zmian - poprawiamy rodzaj i wymiary, nie przestawiamy otworu.
+  // Wyglad okna zalezy od rodzaju: otwor budowlany nie ma wysokosci, za to
+  // dostaje wyjasnienie, co wlasciwie zrobi ze sciana.
+  function odswiezPolaOtworu() {
+    const pref = document.getElementById('openingTypeSelect').value;
+    const przejscie = (pref === 'OB');
+    const h = document.getElementById('openingHeight');
+    if (h) { h.disabled = przejscie; h.placeholder = przejscie ? 'nie dotyczy' : 'Wys. (cm)'; if (przejscie) h.value = ''; }
+    const info = document.getElementById('openingObInfo');
+    if (info) info.style.display = przejscie ? 'block' : 'none';
+  }
+
   function openOpeningForEdit(idx) {
     const op = objects.openings[idx];
     if (!op) return;
@@ -5459,6 +5780,25 @@
     document.getElementById('openingIdInput').value = op.id;
     document.getElementById('openingWidth').value = op.width;
     document.getElementById('openingHeight').value = op.height;
+    const chk = document.getElementById('openingCornerOn');
+    if (chk) {
+      chk.checked = !!op.odKrawedzi;
+      if (op.odKrawedzi) {
+        document.getElementById('openingCornerSide').value = op.odKrawedzi.strona;
+        document.getElementById('openingCornerDist').value = op.odKrawedzi.dystans;
+      } else {
+        document.getElementById('openingCornerDist').value = '';
+      }
+      onOpeningCornerToggle();
+    }
+    const hint = document.getElementById('openingCornerHint');
+    if (hint) {
+      const od = odlegloscOdNaroznikow(op);
+      hint.innerText = od
+        ? 'Teraz stoi ' + Math.round(od.lewa) + ' cm od lewego i ' + Math.round(od.prawa) + ' cm od prawego narożnika.'
+        : '';
+    }
+    odswiezPolaOtworu();
     setOpeningDialogMode(true);
     document.getElementById('openingOverlay').style.display = 'flex';
     checkOpeningDuplicate();
@@ -5482,6 +5822,7 @@
   // Zmiana rodzaju otworu przy poprawianiu: podpowiadamy nowy numer
   // (O3 -> DZ2), ale NIE kasujemy wpisanych wymiarow.
   function onOpeningTypeChange() {
+    odswiezPolaOtworu();
     if (editingOpeningIndex === -1) { autoFillOpeningId(); return; }
     const typ = document.getElementById('openingTypeSelect').value;
     const pole = document.getElementById('openingIdInput');
@@ -5505,15 +5846,31 @@
 
   function addOpeningToCanvas() {
     let id = document.getElementById('openingIdInput').value.trim().toUpperCase(); let w = parseFloat(document.getElementById('openingWidth').value); let h = parseFloat(document.getElementById('openingHeight').value);
+    const rodzaj = typOtworu({ id: id });
+    // Otwor budowlany idzie przez cala wysokosc sciany - wysokosci nie podajemy.
+    if (rodzaj === 'przejscie' && isNaN(h)) h = 0;
     if(!id || isNaN(w) || isNaN(h)) { alert("Proszę poprawnie uzupełnić ID, szerokość oraz wysokość!"); return; }
+    if (rodzaj === 'przejscie' && w < PRZEJSCIE_MIN_CM) {
+      alert('Otwór budowlany węższy niż ' + PRZEJSCIE_MIN_CM + ' cm nie zrobi przerwy w ścianie —\n' +
+            'program scaliłby jej końce z powrotem i pomieszczenia zostałyby rozdzielone.');
+      return;
+    }
+    const odKr = odczytajOdKrawedzi();
     globalOpeningsMemory[id] = {w: w, h: h};
     if (editingOpeningIndex !== -1) {
       const op = objects.openings[editingOpeningIndex];
-      op.id = id; op.width = w; op.height = h;
+      op.id = id; op.width = w; op.height = h; op.typ = rodzaj;
+      if (odKr) op.odKrawedzi = odKr; else delete op.odKrawedzi;
+      ustawZOdleglosci(op);
     } else {
-      objects.openings.push({ x: pendingOpeningPos.x, y: pendingOpeningPos.y, angle: pendingOpeningAngle, id: id, width: w, height: h });
+      const nowy = { x: pendingOpeningPos.x, y: pendingOpeningPos.y, angle: pendingOpeningAngle,
+                     id: id, width: w, height: h, typ: rodzaj };
+      if (odKr) nowy.odKrawedzi = odKr;
+      objects.openings.push(nowy);
+      ustawZOdleglosci(nowy);
     }
-    saveStateToHistory(); renderCanvas(); renderTablesPerSketch(); closeOpeningDialog();
+    recalculateRooms();
+    saveStateToHistory(); renderCanvas(); renderTablesPerSketch(); renderChecks(); closeOpeningDialog();
   }
 
   function getSegmentsForLine(line) {
@@ -5967,11 +6324,18 @@
     }
 
     if(objects.lines) {
-      // najpierw pasy grubosci (tlo), potem osie scian - inaczej pas zaslonilby linie
-      objects.lines.forEach(line => drawWallBand(line));
+      // najpierw pasy grubosci (tlo), potem osie scian - inaczej pas zaslonilby linie.
+      // Otwor budowlany wycina kawalek i z pasa, i z osi - dziura na rysunku
+      // musi zgadzac sie z dziura w grafie, inaczej rysunek klamie.
+      objects.lines.forEach(line => {
+        odcinkiBezPrzejsc({ x1: line.x1, y1: line.y1, x2: line.x2, y2: line.y2 }, line)
+          .forEach(kawalek => drawWallBand(line, kawalek));
+      });
       objects.lines.forEach((line) => {
         const gr = wallThicknessOf(line);
-        ctx.beginPath(); ctx.strokeStyle = wallColorHex(line); ctx.lineWidth = gr > 0 ? 2 : 6; ctx.lineCap = 'round'; ctx.moveTo(line.x1, line.y1); ctx.lineTo(line.x2, line.y2); ctx.stroke();
+        ctx.strokeStyle = wallColorHex(line); ctx.lineWidth = gr > 0 ? 2 : 6; ctx.lineCap = 'round';
+        odcinkiBezPrzejsc({ x1: line.x1, y1: line.y1, x2: line.x2, y2: line.y2 }, line)
+          .forEach(k => { ctx.beginPath(); ctx.moveTo(k.x1, k.y1); ctx.lineTo(k.x2, k.y2); ctx.stroke(); });
         if (!dimChainsOn) drawDimensionKoty(line, false);
       });
     }
@@ -5985,13 +6349,7 @@
     }
 
     if(objects.openings && warstwaWidoczna('openings')) {
-      objects.openings.forEach((op) => {
-        ctx.save(); ctx.translate(op.x, op.y); ctx.rotate(op.angle);
-        let widthPx = (op.width / 100) * PIXELS_PER_METER;
-        ctx.fillStyle = "white"; ctx.fillRect(-widthPx/2, -8, widthPx, 16); ctx.strokeStyle = "#0dcaf0"; ctx.lineWidth = 2; ctx.strokeRect(-widthPx/2, -6, widthPx, 12); ctx.restore();
-        ctx.font = "bold 14px Arial"; ctx.fillStyle = "#0dcaf0"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        let txtBgWidth = ctx.measureText(op.id).width + 6; ctx.fillStyle = "rgba(255,255,255,0.8)"; ctx.fillRect(op.x - txtBgWidth/2, op.y - 25, txtBgWidth, 18); ctx.fillStyle = "#0dcaf0"; ctx.fillText(op.id, op.x, op.y - 15);
-      });
+      objects.openings.forEach(op => drawOpeningSymbol(op));
     }
 
     if(objects.labels && warstwaWidoczna('labels')) {
@@ -6508,12 +6866,14 @@
     };
     const snap = weldEndpoints();
     (objects.lines || []).forEach(line => {
-      splitLineAtAllCrossings(line, snap).forEach(seg => {
+      splitLineAtAllCrossings(line, snap).forEach(segCaly => {
+      odcinkiBezPrzejsc(segCaly, line).forEach(seg => {
         if (Math.hypot(seg.x2 - seg.x1, seg.y2 - seg.y1) < 3) return;
         const a = addNode(seg.x1, seg.y1), b = addNode(seg.x2, seg.y2);
         if (a.key === b.key) return;
         if (a.nbrs.indexOf(b.key) === -1) a.nbrs.push(b.key);
         if (b.nbrs.indexOf(a.key) === -1) b.nbrs.push(a.key);
+      });
       });
     });
     return nodes;
@@ -6583,7 +6943,31 @@
 
   // Usuwa z obrysu wierzcholki lezace dokladnie w jednej linii (efekt uboczny
   // dzielenia scian) - dzieki temu obrys ma tyle rogow, ile naprawde ma pokoj.
+  // Punkt, z ktorego wychodzimy dokladnie tam, skad przyszlismy - slepy zaulek.
+  // Usuwamy go razem z para krawedzi, ktore do niego prowadza.
+  function removeSpikes(poly) {
+    let p = poly.slice();
+    let zmiana = true;
+    let guard = 0;
+    while (zmiana && guard++ < 200) {
+      zmiana = false;
+      for (let i = 0; i < p.length && p.length > 3; i++) {
+        const a = p[(i - 1 + p.length) % p.length], b = p[i], c = p[(i + 1) % p.length];
+        if (Math.hypot(a.x - c.x, a.y - c.y) < 1 &&
+            Math.hypot(b.x - a.x, b.y - a.y) > 1) {
+          // a i c to ten sam punkt, b to koniec kikuta
+          p.splice(i, 1);
+          p.splice(((i - 1) + p.length) % p.length, 1);
+          zmiana = true;
+          break;
+        }
+      }
+    }
+    return p;
+  }
+
   function simplifyPolygon(poly) {
+    poly = removeSpikes(poly);
     const out = [];
     for (let i = 0; i < poly.length; i++) {
       const p0 = poly[(i - 1 + poly.length) % poly.length], p1 = poly[i], p2 = poly[(i + 1) % poly.length];
@@ -7283,6 +7667,7 @@
       if(!objects.customDims[selectedSegKey]) objects.customDims[selectedSegKey] = {};
       
       if(inputVal !== "") { objects.customDims[selectedSegKey].val = inputVal; } else { objects.customDims[selectedSegKey].val = null; }
+      if (typeof refreshCornerOpenings === 'function') refreshCornerOpenings();
       if(objects.rooms) { recalculateRooms(); renderTablesPerSketch(); }
       saveStateToHistory();
       // rysunek dociagamy do wpisanych wymiarow - dopiero po zapisie historii,

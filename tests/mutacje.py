@@ -389,6 +389,56 @@ MUTACJE = [
      "    const lw = document.getElementById('lineWidthSelect');\n    if (lw) lw.value = defaultLineWidth;",
      "    const lw = null;\n    if (lw) lw.value = defaultLineWidth;"),
 
+    ('otwor budowlany nie robi przerwy w scianie',
+     'tests/test-otwory.js',
+     "      odcinkiBezPrzejsc(segCaly, line).forEach(seg => {",
+     "      [segCaly].forEach(seg => {"),
+
+    ('okna i drzwi tez wycinaja sciane',
+     'tests/test-otwory.js',
+     "      if (!isPrzejscie(op)) return;",
+     "      if (false) return;"),
+
+    ('kawalki sciany liczone bez wyciecia przejscia',
+     'tests/test-otwory.js',
+     "    const przej = przejsciaNaScianie(line);\n    if (!przej.length) return [seg];",
+     "    const przej = [];\n    if (!przej.length) return [seg];"),
+
+    ('kolce po kikutach scianki zostaja w obrysie',
+     'tests/test-otwory.js',
+     "    poly = removeSpikes(poly);",
+     "    // poly = removeSpikes(poly);"),
+
+    ('odleglosc od naroznika liczona do srodka otworu',
+     'tests/test-otwory.js',
+     "    const srodek = dystPx + wPx / 2;",
+     "    const srodek = dystPx;"),
+
+    ('lewy naroznik zalezy od kierunku rysowania',
+     'tests/test-otwory.js',
+     "    const aPierwszy = pionowa ? (a.y <= b.y) : (a.x <= b.x);",
+     "    const aPierwszy = true;"),
+
+    ('otwory rysowane w stalym rozmiarze, nie w skali',
+     'tests/test-otwory.js',
+     "  function openingWidthPx(op) { return (parseFloat(op.width) || 0) / 100 * PIXELS_PER_METER; }",
+     "  function openingWidthPx(op) { return 60; }"),
+
+    ('wymiary okien i drzwi nie sa pokazywane na szkicu',
+     'tests/test-otwory.js',
+     "      wiersze.push(op.width + '\u00d7' + op.height + ' cm');",
+     "      // bez wymiarow"),
+
+    ('rodzaj otworu zgadywany bez uwzglednienia prefiksu DW',
+     'tests/test-otwory.js',
+     "    if (id.indexOf('DZ') === 0) return 'drzwi';\n    if (id.indexOf('DW') === 0) return 'drzwiWew';",
+     "    if (id.indexOf('D') === 0) return 'drzwi';\n    if (id.indexOf('DW') === 0) return 'drzwiWew';"),
+
+    ('otwory z odlegloscia nie sa przeliczane po zmianie sciany',
+     'tests/test-otwory.js',
+     "      if (!op.odKrawedzi) return;\n      const li = hostLineIndex(op);",
+     "      return;\n      const li = hostLineIndex(op);"),
+
     ('limit dlugosci sciany 30 m podmieniony na 3 m',
      'tests/test-kontrola.js',
      "CHECK_WALL_MIN = 0.3, CHECK_WALL_MAX = 30;",

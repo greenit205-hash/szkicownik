@@ -53,6 +53,26 @@ pomocniczymi z narożników i ukośnymi kreskami zamiast strzałek — tak jak n
 rysunku technicznym. Ma sens przy włączonej skali 1:1, bo dopiero wtedy liczby
 zgadzają się z długością linii pod nimi.
 
+**Otwory.** Pięć rodzajów: okna (O), okna połaciowe (OPZ), drzwi zewnętrzne (DZ),
+drzwi wewnętrzne (DW) i **otwór budowlany (OB)**. Rysowane w skali, z symbolem
+właściwym dla rodzaju i podpisem „szerokość × wysokość" wprost na szkicu.
+
+**Otwór budowlany** robi prawdziwą przerwę w ścianie — wycina ją także z grafu,
+z którego liczą się obrysy. Dwa pomieszczenia połączone takim otworem przestają
+być dwoma oczkami i wychodzą jako **jedna powierzchnia**. Nie ma tu żadnego
+sklejania pokoi: po prostu nie ma tam ściany, która miałaby je rozdzielić.
+Minimalna szerokość to 40 cm — węższa przerwa zostałaby scalona z powrotem przy
+łączeniu węzłów (GAP_TOL).
+
+**Odległość od narożnika** (opcjonalna, dla każdego rodzaju): podajesz, ile
+centymetrów dzieli krawędź otworu od lewego albo prawego narożnika ściany,
+i program sam go tam stawia. Odległość mierzy się do krawędzi otworu, nie do
+jego środka — tak podaje się ją na budowie i tak zmierzy ją dalmierz przyłożony
+do narożnika. „Lewy" i „prawy" biorą się z położenia na ekranie, nie z kierunku
+rysowania, więc ta sama ściana narysowana w drugą stronę nie zamienia ich
+miejscami. Otwór opisany odległością jedzie razem ze ścianą przy dociąganiu
+rysunku do wymiarów.
+
 **Wymiar od razu (⚡).** Tryb do pracy ściana po ścianie: rysujesz odcinek,
 natychmiast otwiera się okno wymiaru, naciskasz przycisk na dalmierzu — wartość
 wpada do pola, zapisuje się sama, rysunek dociąga się do niej i rysujesz dalej.
@@ -156,6 +176,7 @@ działa kod, który trafia na urządzenie.
 | `test-korekty.js` | poprawianie tego, co już wstawione, bez cofania całej pracy |
 | `test-grubosc.js` | grubość ścian i zapis/odczyt projektu |
 | `test-kontrola.js` | zakresy, sprzeczności i braki w pomiarach |
+| `test-otwory.js` | otwór budowlany, odległość od narożnika, rodzaje otworów |
 | `test-autodim.js` | tryb „wymiar od razu", dalmierz, zapamiętanie ustawień |
 | `test-linie.js` | kolory ścian, prosta linia, linia na zdjęciu |
 | `test-opisy.js` | czytelność podpisów, granice eksportu, kolory przeszkód |
@@ -189,6 +210,12 @@ zamiast 25,00.
 **Węzły scalają się po odległości, nie przez zaokrąglanie do siatki.**
 Zaokrąglanie nie działa — pomieszczenia o pięciu i więcej ścianach czasem się
 nie domykają.
+
+**Otwór budowlany wycina ścianę w `buildPlanarGraph`, nie w tabeli.** Obrysy
+liczą się z grafu, więc przerwa musi być właśnie tam — inaczej powierzchnia
+i rysunek mówiłyby co innego. Obchodzenie grafu wchodzi wtedy w kikuty ścianki
+działowej i zaraz z nich wraca; `removeSpikes` wycina te ślepe zaułki z obrysu,
+bo bez tego silnik wymiarowania żąda pomiaru krawędzi, których nie ma.
 
 **Narysowana linia jest linią odniesienia.** Wymiary, obrysy, powierzchnie,
 przyciąganie i domykanie narożników liczą się po niej i tylko po niej. Wybór
@@ -243,6 +270,7 @@ CHAIN_POZIOM = 30          // px - odstęp między kolejnymi poziomami ciągu
 MAX_THICKNESS_CM = 200     // grubość ściany ponad to traktujemy jak pomyłkę
 FOTO_MAX_PX = 1600         // dłuższy bok zdjęcia po zmniejszeniu
 FOTO_JAKOSC = 0.75         // kompresja JPEG przy wgrywaniu
+PRZEJSCIE_MIN_CM = 40      // węższy otwór budowlany scaliłby się z powrotem
 ```
 
 Kontrola pomiarów: tolerancja porównań 2 cm, ściana 0,3–30 m, wysokość
@@ -261,7 +289,7 @@ sketches = [{
     lines:     [{x1, y1, x2, y2, gr, str, kolor}],        // gr w cm, brak = cienka linia
     proste:    [{x1, y1, x2, y2, kolor, gruba, strzalka}], // zwykłe kreski, bez wpływu na obliczenia
     rooms:     [{id, num, name, polygon, area, centroid, _spans}],
-    openings:  [{x, y, angle, id, width, height}],        // wymiary w cm
+    openings:  [{x, y, angle, id, width, height, typ, odKrawedzi}],  // wymiary w cm
     obstacles: [{id, polygon, label, subtract, w, d}],     // w/d w cm
     customDims: { "srodekX_srodekY_dlugosc": {val: '5.00'} },
     labels: [], callouts: [], freehand: [],

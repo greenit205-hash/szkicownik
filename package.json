@@ -4,7 +4,7 @@
   "private": true,
   "description": "Szkicownik rzutów i przekrojów - PWA, jeden plik index.html",
   "scripts": {
-    "test": "node tests/test-obrysy.js && node tests/test-korekty.js && node tests/test-grubosc.js && node tests/test-kontrola.js && node tests/test-skala.js && node tests/test-projekty.js && node tests/test-zdjecia.js && node tests/test-opisy.js && node tests/test-linie.js && node tests/test-autodim.js",
+    "test": "node tests/test-obrysy.js && node tests/test-korekty.js && node tests/test-grubosc.js && node tests/test-kontrola.js && node tests/test-skala.js && node tests/test-projekty.js && node tests/test-zdjecia.js && node tests/test-opisy.js && node tests/test-linie.js && node tests/test-autodim.js && node tests/test-otwory.js",
     "test:mutacje": "python3 tests/mutacje.py"
   },
   "devDependencies": {
