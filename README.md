@@ -53,6 +53,14 @@ pomocniczymi z narożników i ukośnymi kreskami zamiast strzałek — tak jak n
 rysunku technicznym. Ma sens przy włączonej skali 1:1, bo dopiero wtedy liczby
 zgadzają się z długością linii pod nimi.
 
+**Wymiar od razu (⚡).** Tryb do pracy ściana po ścianie: rysujesz odcinek,
+natychmiast otwiera się okno wymiaru, naciskasz przycisk na dalmierzu — wartość
+wpada do pola, zapisuje się sama, rysunek dociąga się do niej i rysujesz dalej.
+Pomieszczenie samo dochodzi do właściwych proporcji, bez wracania do wymiarowania
+na końcu. Tryb włącza przy okazji 📐 Skalę 1:1, bo bez dociągania rysunku traci
+sens, i zapamiętuje się w projekcie. Bez dalmierza działa tak samo, tylko wymiar
+wpisujesz z ręki.
+
 **Kolor ścian.** Osiem kolorów, wybierane polem obok grubości albo per ściana
 w oknie 🧱 Grubość. Kolor obejmuje oś ściany i zakreskowany pas. Domyślny
 grafitowy zapisuje się jako brak pola, więc stare szkice wyglądają jak dotąd.
@@ -148,6 +156,7 @@ działa kod, który trafia na urządzenie.
 | `test-korekty.js` | poprawianie tego, co już wstawione, bez cofania całej pracy |
 | `test-grubosc.js` | grubość ścian i zapis/odczyt projektu |
 | `test-kontrola.js` | zakresy, sprzeczności i braki w pomiarach |
+| `test-autodim.js` | tryb „wymiar od razu", dalmierz, zapamiętanie ustawień |
 | `test-linie.js` | kolory ścian, prosta linia, linia na zdjęciu |
 | `test-opisy.js` | czytelność podpisów, granice eksportu, kolory przeszkód |
 | `test-zdjecia.js` | zdjęcia, kalibracja, wyłączenie narzędzi rysunkowych |

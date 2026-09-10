@@ -131,8 +131,8 @@ MUTACJE = [
 
     ('lista projektow nie sortuje wedlug daty',
      'tests/test-projekty.js',
-     "      .sort((a, b) => String(b.zapisano).localeCompare(String(a.zapisano)));",
-     "      .sort((a, b) => String(a.zapisano).localeCompare(String(b.zapisano)));"),
+     "        const d = String(b.zapisano).localeCompare(String(a.zapisano));",
+     "        const d = String(a.zapisano).localeCompare(String(b.zapisano));"),
 
     ('projekt ze starej wersji nie jest przenoszony',
      'tests/test-projekty.js',
@@ -328,6 +328,66 @@ MUTACJE = [
      'tests/test-linie.js',
      "      if (Math.hypot(koniec.x - startPos.x, koniec.y - startPos.y) > 6) {",
      "      if (true) {"),
+
+    ('okno wymiaru nie wyskakuje po narysowaniu sciany',
+     'tests/test-autodim.js',
+     "              askDimensionFor(newLine);",
+     "              // askDimensionFor(newLine);"),
+
+    ('tryb pyta o wymiar takze przy wylaczonym przelaczniku',
+     'tests/test-autodim.js',
+     "    if (!autoDimOn || !line) return;",
+     "    if (!line) return;"),
+
+    ('dalmierz zapisuje wymiar mimo pustego pola',
+     'tests/test-autodim.js',
+     "    if (!pole || !String(pole.value).trim()) return false;",
+     "    if (!pole) return false;"),
+
+    ('automatyczny zapis dziala poza trybem',
+     'tests/test-autodim.js',
+     "  function autoDimSave() {\n    if (!autoDimPending) return false;",
+     "  function autoDimSave() {\n    if (false) return false;"),
+
+    ('okno wymiaru wskazuje inna sciane niz narysowana',
+     'tests/test-autodim.js',
+     "    const key = getSegKey(line.x1, line.y1, line.x2, line.y2);",
+     "    const key = getSegKey(line.x1 + 40, line.y1, line.x2, line.y2);"),
+
+    ('wlaczenie trybu nie wlacza skali 1:1',
+     'tests/test-autodim.js',
+     "    if (autoDimOn && !autoFitOn) {",
+     "    if (false) {"),
+
+    ('pominiecie sciany zapisuje pusty wymiar',
+     'tests/test-autodim.js',
+     "  function skipAutoDim() {\n    autoDimPending = false;",
+     "  function skipAutoDim() {\n    applyMeasureDimension();\n    autoDimPending = false;"),
+
+    ('lista projektow sortowana niestabilnie',
+     'tests/test-projekty.js',
+     "        if (d !== 0) return d;\n        return String(b.id).localeCompare(String(a.id));",
+     "        return d;"),
+
+    ('tryb wymiar od razu nie jest zapamietywany w projekcie',
+     'tests/test-autodim.js',
+     "      wymiarOdRazu: autoDimOn,",
+     "      wymiarOdRazu: false,"),
+
+    ('tryb nie wraca po wczytaniu projektu',
+     'tests/test-autodim.js',
+     "    autoDimOn = !!data.wymiarOdRazu;",
+     "    autoDimOn = false;"),
+
+    ('przycisk pokazuje co innego niz stan trybu',
+     'tests/test-autodim.js',
+     "      b.innerText = autoDimOn ? '\u26a1 Wymiar od razu' : '\u26a1 Wymiar od razu (wy\u0142.)';\n    }\n    const sw = document.getElementById('wallColorSelect');",
+     "      b.innerText = '\u26a1 Wymiar od razu (wy\u0142.)';\n    }\n    const sw = document.getElementById('wallColorSelect');"),
+
+    ('pasek nie odtwarza ustawien z projektu',
+     'tests/test-autodim.js',
+     "    const lw = document.getElementById('lineWidthSelect');\n    if (lw) lw.value = defaultLineWidth;",
+     "    const lw = null;\n    if (lw) lw.value = defaultLineWidth;"),
 
     ('limit dlugosci sciany 30 m podmieniony na 3 m',
      'tests/test-kontrola.js',

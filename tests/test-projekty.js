@@ -105,6 +105,28 @@ async function testyMagazynu(zIndexedDb, etykieta) {
   sprawdz(etykieta + ': najnowszy jest na górze listy',
     lista[0].nazwa === 'Chałupa Nowaków', lista[0].nazwa);
 
+  // Dwa projekty zapisane w tej samej milisekundzie - sama data ich nie
+  // rozróżni, a kolejność na liście nie może być losowa. To nie teoria:
+  // przy szybkim zapisie z tabletu zdarza się regularnie.
+  await app(`
+    const teraz = new Date().toISOString();
+    return Promise.all([
+      storeZapisz({ id: 'aaa-rowno', nazwa: 'Pierwszy', zapisano: teraz, dane: { sketches: [] } }),
+      storeZapisz({ id: 'bbb-rowno', nazwa: 'Drugi',    zapisano: teraz, dane: { sketches: [] } })
+    ]);
+  `);
+  const rowne = await app("return storeLista();");
+  const kolejnosc1 = rowne.filter(r => String(r.id).indexOf('rowno') > -1).map(r => r.nazwa);
+  const rowne2 = await app("return storeLista();");
+  const kolejnosc2 = rowne2.filter(r => String(r.id).indexOf('rowno') > -1).map(r => r.nazwa);
+  sprawdz(etykieta + ': przy równych znacznikach czasu kolejność jest ustalona',
+    JSON.stringify(kolejnosc1) === JSON.stringify(['Drugi', 'Pierwszy']),
+    JSON.stringify(kolejnosc1));
+  sprawdz(etykieta + ': i ta sama przy każdym odczycie',
+    JSON.stringify(kolejnosc1) === JSON.stringify(kolejnosc2),
+    JSON.stringify(kolejnosc1) + ' vs ' + JSON.stringify(kolejnosc2));
+  await app("return Promise.all([storeUsun('aaa-rowno'), storeUsun('bbb-rowno')]);");
+
   // powrót po odświeżeniu strony
   const idPierwszego = lista.find(p => p.nazwa === 'Dom Kowalskich').id;
   app(`localStorage.setItem('szkicownik.ostatni', ${JSON.stringify(idPierwszego)});`);

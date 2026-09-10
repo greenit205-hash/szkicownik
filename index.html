@@ -172,6 +172,7 @@
             <button type="button" id="btnDimChains" class="btn btn-outline-info btn-sm fw-bold" onclick="toggleDimChains()" title="Wymiary poza obrysem, jak na rysunku technicznym">📏 Ciągi</button>
             <button type="button" id="btnDiagSnap" class="btn btn-secondary btn-sm fw-bold" onclick="toggleDiagSnap()" title="Przyciąganie linii do 45° — skosy dachu, ścięte narożniki">◺ 45° wł.</button>
             <button type="button" id="btnAutoFit" class="btn btn-success btn-sm fw-bold" onclick="toggleAutoFit()" title="Rysunek sam dopasowuje się do wpisanych wymiarów">📐 Skala 1:1</button>
+            <button type="button" id="btnAutoDim" class="btn btn-outline-warning btn-sm fw-bold text-dark" onclick="toggleAutoDim()" title="Po narysowaniu ściany od razu pyta o wymiar — dalmierz wpisuje go sam">⚡ Wymiar od razu (wył.)</button>
             <button type="button" class="btn btn-outline-success btn-sm fw-bold" onclick="fitDrawingNow()" title="Dopasuj rysunek do wpisanych wymiarów teraz">⟳ Dopasuj</button>
           </div>
           <div class="btn-group ms-1 mt-2 mt-md-0">
@@ -356,9 +357,10 @@
     <label class="form-label small fw-bold text-muted text-center d-block">Wpisz wartość zebraną z dalmierza:</label>
     <input type="number" id="modalDimInput" class="form-control form-control-lg mb-3 border-primary text-center fw-bold" step="0.01" inputmode="decimal" placeholder="np. 4.00">
     <div class="small text-center mb-2" id="modalAutoHint" style="display:none; color:#fd7e14;"></div>
+    <div class="alert alert-warning py-1 px-2 small mb-2" id="modalAutoDimInfo" style="display:none;"></div>
     <button type="button" id="modalBtnHideDim" class="btn btn-warning btn-sm fw-bold w-100 mb-3" onclick="toggleDimHiddenFromModal()">Ukryj wymiar</button>
     <div class="d-flex justify-content-between">
-      <button type="button" class="btn btn-secondary btn-sm" onclick="closeDimEditDialog()">Anuluj</button>
+      <button type="button" class="btn btn-secondary btn-sm" onclick="skipAutoDim()">Pomiń</button>
       <button type="button" class="btn btn-success btn-sm fw-bold px-4" onclick="applyMeasureDimension()">Zapisz wymiar</button>
     </div>
   </div>
@@ -884,6 +886,7 @@
       domyslnyKolorSciany: defaultWallColor,
       domyslnyKolorLinii: defaultLineColor,
       domyslnaGruboscLinii: defaultLineWidth,
+      wymiarOdRazu: autoDimOn,
       sketches: sketches
     };
   }
@@ -897,6 +900,9 @@
     defaultWallColor = KOLORY.some(k => k.id === data.domyslnyKolorSciany) ? data.domyslnyKolorSciany : 'grafit';
     defaultLineColor = KOLORY.some(k => k.id === data.domyslnyKolorLinii) ? data.domyslnyKolorLinii : 'czerwony';
     defaultLineWidth = LINIA_GRUBOSCI.some(g => g.id === data.domyslnaGruboscLinii) ? data.domyslnaGruboscLinii : 'srednia';
+    // tryb "wymiar od razu" ma przetrwac zamkniecie aplikacji - kto raz tak
+    // pracuje, ten pracuje tak przy kazdym wyjezdzie
+    autoDimOn = !!data.wymiarOdRazu;
     sketches.forEach(sk => {
       const o = sk.objects = sk.objects || {};
       ['lines', 'freehand', 'labels', 'rooms', 'openings', 'noteLines', 'hatches', 'slopes', 'callouts', 'obstacles', 'proste']
@@ -1088,7 +1094,14 @@
     return (rekordy || [])
       .map(r => ({ id: r.id, nazwa: r.nazwa || 'Projekt bez nazwy',
                    zapisano: r.zapisano || '', ile: (r.dane && r.dane.sketches ? r.dane.sketches.length : 0) }))
-      .sort((a, b) => String(b.zapisano).localeCompare(String(a.zapisano)));
+      // Przy dwoch zapisach w tej samej milisekundzie sama data nie rozstrzyga,
+      // a kolejnosc na liscie robi sie losowa. Rozstrzygamy identyfikatorem,
+      // ktory rosnie w czasie - dzieki temu lista jest zawsze taka sama.
+      .sort((a, b) => {
+        const d = String(b.zapisano).localeCompare(String(a.zapisano));
+        if (d !== 0) return d;
+        return String(b.id).localeCompare(String(a.id));
+      });
   }
 
   // ================= BIEŻĄCY PROJEKT =================
@@ -2012,6 +2025,114 @@
       if (Math.abs(kat - c) <= DIAG_ANGLE_TOLERANCE) return naKierunek(od, raw, c);
     }
     return { x: raw.x, y: raw.y };
+  }
+
+  // ================= WYMIAR OD RAZU PO NARYSOWANIU =================
+  //
+  // Tryb pracy „ściana po ścianie": rysujesz odcinek, natychmiast wyskakuje
+  // okno wymiaru, naciskasz przycisk na dalmierzu — wartość wpada do pola,
+  // zapisuje się sama, rysunek dociąga się do niej i możesz rysować dalej.
+  // Jeden ruch palcem plus jedno naciśnięcie na ścianę.
+  //
+  // Nic tu nie jest nowym silnikiem. Okno wymiaru było już celem dla dalmierza
+  // (distoActiveTarget, rodzaj 'dim'), a skalowanie rysunku robi fitDrawingToDimensions.
+  // Tutaj tylko łączymy jedno z drugim i domykamy pętlę.
+
+  let autoDimOn = false;
+  let autoDimPending = false;      // czy okno otwarto właśnie w tym trybie
+
+  function toggleAutoDim() {
+    autoDimOn = !autoDimOn;
+    const b = document.getElementById('btnAutoDim');
+    if (b) {
+      b.classList.toggle('btn-warning', autoDimOn);
+      b.classList.toggle('btn-outline-warning', !autoDimOn);
+      b.innerText = autoDimOn ? '⚡ Wymiar od razu' : '⚡ Wymiar od razu (wył.)';
+    }
+    if (autoDimOn && !autoFitOn) {
+      // bez dociągania rysunku ten tryb traci sens - włączamy je razem
+      toggleAutoFit();
+    }
+    saveProjectToStorage();
+  }
+
+  // Wywoływane zaraz po dodaniu ściany do szkicu.
+  function askDimensionFor(line) {
+    if (!autoDimOn || !line) return;
+    const key = getSegKey(line.x1, line.y1, line.x2, line.y2);
+    autoDimPending = true;
+    // krótka zwłoka: pozwala domknąć gest rysowania, zanim wyskoczy okno
+    setTimeout(() => openAutoDimDialog(key), 60);
+  }
+
+  function openAutoDimDialog(key) {
+    if (!objects.customDims) objects.customDims = {};
+    selectedSegKey = key;
+    dimSourceIsList = false;
+    const pole = document.getElementById('modalDimInput');
+    const custObj = objects.customDims[key];
+    pole.value = (custObj && custObj.val) ? custObj.val : '';
+
+    const btnHide = document.getElementById('modalBtnHideDim');
+    const isHid = (custObj && custObj.hidden);
+    btnHide.innerText = isHid ? 'Pokaż wymiar' : 'Ukryj wymiar';
+    btnHide.className = isHid ? 'btn btn-success btn-sm fw-bold w-100 mb-3' : 'btn btn-warning btn-sm fw-bold w-100 mb-3';
+
+    const hintEl = document.getElementById('modalAutoHint');
+    const hint = buildAutoDimHint(key);
+    if (hint) { hintEl.innerText = hint.text; hintEl.style.color = hint.warn ? '#dc3545' : '#fd7e14'; hintEl.style.display = 'block'; }
+    else { hintEl.style.display = 'none'; }
+
+    const info = document.getElementById('modalAutoDimInfo');
+    if (info) {
+      info.style.display = 'block';
+      info.innerHTML = distoIsConnected()
+        ? '⚡ <b>Naciśnij przycisk na dalmierzu</b> — wymiar zapisze się sam, a rysunek dociągnie się do niego.'
+        : '⚡ Wpisz wymiar tej ściany. <span class="text-muted">Dalmierz niepodłączony — po połączeniu (📡) wartość wpadnie tu sama.</span>';
+    }
+
+    document.getElementById('dimEditOverlay').style.display = 'flex';
+    if (pole && pole.focus) { try { pole.focus(); pole.select(); } catch (e) {} }
+  }
+
+  // Pominięcie wymiaru tej ściany - bywa, że po prostu nie da się zmierzyć.
+  function skipAutoDim() {
+    autoDimPending = false;
+    const info = document.getElementById('modalAutoDimInfo');
+    if (info) info.style.display = 'none';
+    closeDimEditDialog();
+  }
+
+  // Wywoływane przez dalmierz po wpisaniu wartości do pola, gdy okno otworzył
+  // ten tryb. Zapis idzie tą samą drogą co ręczny, razem z dociąganiem rysunku.
+  function autoDimSave() {
+    if (!autoDimPending) return false;
+    const pole = document.getElementById('modalDimInput');
+    if (!pole || !String(pole.value).trim()) return false;
+    autoDimPending = false;
+    const info = document.getElementById('modalAutoDimInfo');
+    if (info) info.style.display = 'none';
+    applyMeasureDimension();
+    return true;
+  }
+
+  // Wygląd przełączników musi zgadzać się ze stanem, który wrócił z projektu.
+  // Inaczej przycisk pokazuje „wył.", a tryb jest włączony — i odwrotnie.
+  function syncToggleButtons() {
+    const b = document.getElementById('btnAutoDim');
+    if (b) {
+      b.classList.toggle('btn-warning', autoDimOn);
+      b.classList.toggle('btn-outline-warning', !autoDimOn);
+      b.innerText = autoDimOn ? '⚡ Wymiar od razu' : '⚡ Wymiar od razu (wył.)';
+    }
+    const sw = document.getElementById('wallColorSelect');
+    if (sw) wypelnijKolory(sw, defaultWallColor);
+    const sl = document.getElementById('lineColorSelect');
+    if (sl) wypelnijKolory(sl, defaultLineColor);
+    const lw = document.getElementById('lineWidthSelect');
+    if (lw) lw.value = defaultLineWidth;
+    const ws = document.getElementById('wallSideSelect');
+    if (ws) ws.value = defaultWallSide;
   }
 
   // ================= RYSUNEK W RZECZYWISTEJ SKALI =================
@@ -4229,6 +4350,11 @@
     // ściany — dzięki temu w terenie wystarczy celować i naciskać przycisk.
     if (target.kind === 'guided' && distoAutoAdvance) {
       setTimeout(() => { try { guidedSaveAndNext(); } catch (e) {} }, 250);
+    }
+    // Tryb "wymiar od razu": okno otworzylo sie zaraz po narysowaniu sciany,
+    // wiec po odczycie z dalmierza zapisujemy je same i wracamy do rysowania.
+    if (target.kind === 'dim' && distoAutoAdvance) {
+      setTimeout(() => { try { autoDimSave(); } catch (e) {} }, 250);
     }
   }
 
@@ -7112,6 +7238,7 @@
               alert('Ta ściana prawie dokładnie pokrywa się z już istniejącą - nie została dodana (to częsta przyczyna tego, że pomieszczenie nie chce się domknąć). Jeśli chciałeś zmienić przebieg istniejącej ściany, przeciągnij jej koniec w trybie 🖱️ Wybierz.');
           } else {
               objects.lines.push(newLine); saveStateToHistory();
+              askDimensionFor(newLine);
               // Pomieszczen NIE tworzymy juz w trakcie rysowania. Najpierw caly szkic,
               // potem 🏠 Pomieszcz. + klikniecie w srodku - dzieki temu pozniejszy podzial
               // duzego obrysu na mniejsze pokoje nie zostawia starego, zbyt duzego pokoju.
@@ -7165,6 +7292,9 @@
   }
 
   function closeDimEditDialog() {
+      autoDimPending = false;
+      const infoAD = document.getElementById('modalAutoDimInfo');
+      if (infoAD) infoAD.style.display = 'none';
       selectedSegKey = null; document.getElementById('dimEditOverlay').style.display = 'none'; renderCanvas();
       if (dimSourceIsList) { dimSourceIsList = false; openWallListDialog(); }
   }
