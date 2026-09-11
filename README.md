@@ -73,6 +73,42 @@ rysowania, więc ta sama ściana narysowana w drugą stronę nie zamienia ich
 miejscami. Otwór opisany odległością jedzie razem ze ścianą przy dociąganiu
 rysunku do wymiarów.
 
+**Mur rośnie sam we właściwą stronę.** Program sprawdza, po której stronie
+ściany jest pomieszczenie, i stawia mur po przeciwnej. Ściana z pokojami po obu
+stronach dostaje mur po osi. Wybór „pas: lewa / oś / prawa" zostaje jako ręczne
+nadpisanie — raz użyty, nie jest już przeliczany automatycznie.
+
+**Przyciąganie do lica, nie do osi.** Gruba ściana podstawia dodatkowo swoje
+lica, więc rysując kolejne pomieszczenie trafiasz tam, gdzie ono naprawdę się
+zaczyna — a nie w środek muru.
+
+**Punkt odniesienia (✛).** Miejsce, którego nie da się wskazać palcem: „2,15 m
+od lewego narożnika", „80 cm od krawędzi okna". Klikasz punkt, od którego
+mierzysz — narożnik, krawędź albo środek otworu, wcześniej postawiony punkt —
+podajesz odległość i kierunek (wzdłuż ściany albo prostopadle). Znacznik jest
+punktem przyciągania, więc kolejna ściana zaczyna się w nim co do milimetra.
+Nie jest ścianą ani wymiarem: niczego nie liczy.
+
+**Przegrody (SZ1, SW2…).** Oznaczenie przypinane do ściany w oknie 🧱 Grubość,
+z podpowiedzią kolejnego wolnego numeru. Ta sama przegroda może być na wielu
+ścianach — SZ1 to jeden typ muru, nie jedna ściana. Zestawienie pod szkicem
+podaje rodzaj, grubość, liczbę ścian i łączną długość. Na rysunku pokazują się
+razem z oznaczeniami ścian (🔤).
+
+**Odczyt od narożnika.** Najeżdżasz na ścianę i widzisz odległość od tego
+narożnika, od którego zacząłeś — aż do drugiego końca. Punkt odniesienia jest
+zapamiętywany w chwili wejścia na ścianę i nie przeskakuje w połowie, bo wtedy
+nie dałoby się wyznaczyć miejsca, w którym ma się zacząć nowa ściana.
+
+**Sumowanie z dalmierza.** Ścianę często mierzy się na kilka razy. W trybie
+sumowania kolejne odczyty dodają się do siebie, a do pola trafia dopiero suma
+po naciśnięciu „Zatwierdź sumę". Ostatni strzał da się cofnąć.
+
+**Pełny ekran (⛶).** Płótno zajmuje cały ekran, wszystko inne znika, a narzędzia
+chowają się w wysuwanym panelu pod przyciskiem ☰. Pasek narzędzi jest tam
+przenoszony w całości, nie kopiowany — dwa komplety przycisków potrafiłyby
+pokazywać różne stany tego samego przełącznika.
+
 **Wymiar od razu (⚡).** Tryb do pracy ściana po ścianie: rysujesz odcinek,
 natychmiast otwiera się okno wymiaru, naciskasz przycisk na dalmierzu — wartość
 wpada do pola, zapisuje się sama, rysunek dociąga się do niej i rysujesz dalej.
@@ -176,6 +212,8 @@ działa kod, który trafia na urządzenie.
 | `test-korekty.js` | poprawianie tego, co już wstawione, bez cofania całej pracy |
 | `test-grubosc.js` | grubość ścian i zapis/odczyt projektu |
 | `test-kontrola.js` | zakresy, sprzeczności i braki w pomiarach |
+| `test-mury.js` | lica grubych ścian, strona muru, punkty odniesienia, przegrody |
+| `test-teren.js` | odczyt od narożnika, sumowanie dalmierza, pełny ekran |
 | `test-otwory.js` | otwór budowlany, odległość od narożnika, rodzaje otworów |
 | `test-autodim.js` | tryb „wymiar od razu", dalmierz, zapamiętanie ustawień |
 | `test-linie.js` | kolory ścian, prosta linia, linia na zdjęciu |
@@ -286,7 +324,8 @@ sketches = [{
   panX, panY, zoomLevel, showDimensions,
   photo: { src, w, h, opis, skalaPxNaM },          // tylko przy kind: 'zdjecie'
   objects: {
-    lines:     [{x1, y1, x2, y2, gr, str, kolor}],        // gr w cm, brak = cienka linia
+    lines:     [{x1, y1, x2, y2, gr, str, kolor, przegroda}],  // gr w cm, brak = cienka linia
+    punkty:    [{x, y, dyst, kierunek, opis, baza}],           // punkty odniesienia, dyst w cm
     proste:    [{x1, y1, x2, y2, kolor, gruba, strzalka}], // zwykłe kreski, bez wpływu na obliczenia
     rooms:     [{id, num, name, polygon, area, centroid, _spans}],
     openings:  [{x, y, angle, id, width, height, typ, odKrawedzi}],  // wymiary w cm

@@ -48,6 +48,43 @@
     .app-bar h1 { font-size: 1.25rem; font-weight: 700; margin: 0; color: var(--se-dark); }
     .thick-box { display: inline-flex; align-items: center; gap: 4px; background: #fff; border: 1px solid #ced4da; border-radius: 6px; padding: 2px 6px; }
     .thick-box input { width: 62px; }
+
+    /* PRAWDZIWY pełny ekran: płótno zajmuje całe okno, narzędzia chowają się
+       w wysuwanym panelu. Wszystko, co nie jest rysunkiem, znika z widoku. */
+    body.fs-active { overflow: hidden; }
+    body.fs-active .app-bar,
+    body.fs-active #storageBar,
+    body.fs-active .card:not(#fullscreenWrapper) { display: none !important; }
+    .fullscreen-mode { position: fixed !important; inset: 0 !important;
+      width: 100vw !important; height: 100vh !important; height: 100dvh !important;
+      margin: 0 !important; padding: 0 !important; max-width: 100% !important;
+      border-radius: 0 !important; z-index: 999999 !important;
+      display: flex; flex-direction: column; background: #f0f2f5; }
+    .fullscreen-mode > .card-header,
+    .fullscreen-mode #checkPanel,
+    .fullscreen-mode #tablesPerSketchContainer,
+    .fullscreen-mode #photoBar,
+    .fullscreen-mode .sketch-tabs,
+    .fullscreen-mode p.text-muted { display: none !important; }
+    .fullscreen-mode > .card-body { padding: 0; flex: 1; display: flex; flex-direction: column; min-height: 0; }
+    .fullscreen-mode #canvasWrapper { flex: 1; min-height: 0; position: relative; }
+    .fullscreen-mode .canvas-viewport { height: 100% !important; border: none; border-radius: 0; }
+    .fullscreen-mode #toolbarHome { display: none; }
+
+    .fs-panel-btn { display: none; position: absolute; top: 10px; left: 10px; z-index: 30;
+      width: 46px; height: 46px; border-radius: 10px; border: none; font-size: 22px;
+      background: var(--se-dark); color: #fff; box-shadow: 0 2px 10px rgba(0,0,0,.35); }
+    .fullscreen-mode .fs-panel-btn { display: block; }
+    .fs-panel { display: none; position: absolute; top: 0; left: 0; bottom: 0; z-index: 25;
+      width: min(92vw, 430px); background: #fff; box-shadow: 4px 0 24px rgba(0,0,0,.3);
+      transform: translateX(-100%); transition: transform .2s ease; flex-direction: column; }
+    .fullscreen-mode .fs-panel { display: flex; }
+    .fs-panel.open { transform: translateX(0); }
+    .fs-panel-head { background: var(--se-dark); color: #fff; padding: 10px 12px 10px 64px;
+      display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .fs-panel-body { padding: 10px; overflow-y: auto; flex: 1; }
+    .fs-panel-body #toolbarBox { flex-direction: column; align-items: stretch; }
+    .fs-panel-body .btn-group { flex-wrap: wrap; }
   </style>
 </head>
 <body>
@@ -102,7 +139,7 @@
       <p class="text-muted small mb-2 d-none d-md-block"><strong>Wskazówka:</strong> rysunek jest tylko szkicem — liczą się wyłącznie wpisane wymiary (<strong>✍️ Wymiaruj</strong>). Ściany rysuje się narzędziem <strong>📏 Ściana</strong>; pole <strong>Grubość</strong> obok decyduje, czy ściana będzie cienką linią (0), czy zakreskowanym pasem, a <strong>Pas</strong> — po której stronie rysowanej linii ten mur leży. Wymiary i powierzchnie liczą się zawsze po linii, którą rysujesz. Przy włączonej <strong>📐 Skali 1:1</strong> rysunek sam dociąga się do wpisanych wymiarów, więc odległości na ekranie odpowiadają rzeczywistym.</p>
       <div id="photoBar" style="display:none"></div>
       <div id="canvasWrapper" class="flex-grow-1 d-flex flex-column">
-        <div class="d-flex flex-wrap gap-2 mb-2 bg-light p-2 border rounded align-items-center">
+        <div id="toolbarHome"><div id="toolbarBox" class="d-flex flex-wrap gap-2 mb-2 bg-light p-2 border rounded align-items-center">
           <div class="btn-group flex-wrap shadow-sm">
             <button type="button" id="btnModeSelect" class="btn btn-outline-dark btn-sm fw-bold" onclick="setMode('select')">🖱️ Wybierz</button>
             <button type="button" id="btnModeLine" class="btn btn-primary btn-sm fw-bold" onclick="setMode('line')">📏 Ściana</button>
@@ -116,6 +153,7 @@
             <button type="button" id="btnModeObstacle" class="btn btn-outline-dark btn-sm fw-bold" onclick="setMode('obstacle')">⬛ Przeszkoda</button>
             <div class="btn-group" role="group">
                 <button type="button" id="btnModeProsta" class="btn btn-outline-danger btn-sm fw-bold" onclick="setMode('prosta')">➖ Linia</button>
+            <button type="button" id="btnModePunkt" class="btn btn-outline-dark btn-sm fw-bold" onclick="setMode('punkt')" title="Postaw punkt w zadanej odległości od narożnika, okna albo innego punktu">✛ Punkt</button>
             <button type="button" id="btnModeDraw" class="btn btn-outline-primary btn-sm fw-bold" onclick="setMode('draw')">✏️ Ołówek</button>
                 <div class="d-flex align-items-center bg-white border px-1" id="penColors" style="display:none !important;">
                     <div class="color-btn active" id="color-black" onclick="setPenColor('#212529', this)"></div>
@@ -140,7 +178,8 @@
           <span class="thick-box" title="Grubość ściany rysowanej narzędziem 📏 Ściana. 0 = cienka linia.">
             <label class="small fw-bold text-muted mb-0 text-nowrap">🧱 Grubość [cm]:</label>
             <input type="number" min="0" max="200" step="1" inputmode="numeric" id="wallThicknessInput" class="form-control form-control-sm fw-bold" value="0" oninput="setDefaultThickness(this.value)">
-            <label class="small fw-bold text-muted mb-0 text-nowrap ms-1" title="Po której stronie rysowanej linii leży mur">Pas:</label>
+            <button type="button" id="btnAutoStrona" class="btn btn-sm btn-secondary fw-bold ms-1" onclick="toggleAutoStrona()" title="Program sam ustala, po której stronie rośnie mur: tam, gdzie nie ma pomieszczenia">🧱 Mur na zewnątrz: auto</button>
+            <label class="small fw-bold text-muted mb-0 text-nowrap ms-1" title="Ręczny wybór strony — działa tylko przy wyłączonym trybie auto">Pas:</label>
             <select id="wallSideSelect" class="form-select form-select-sm" style="width:auto;" onchange="setDefaultSide(this.value)">
               <option value="os">na osi</option>
               <option value="lewa">po lewej</option>
@@ -190,8 +229,16 @@
             <button type="button" class="btn btn-outline-secondary btn-sm fw-bold" onclick="rotateSketch(90)" title="Obróć o 90°">⟳ 90°</button>
             <button type="button" id="btnFullscreen" class="btn btn-dark btn-sm fw-bold" onclick="toggleFullscreen()">⛶ Pełny ekran</button>
           </div>
-        </div>
+        </div></div>
         <div id="canvasViewport" class="canvas-viewport"><canvas id="sketchPad" width="3000" height="3000"></canvas></div>
+        <button type="button" id="fsPanelBtn" class="fs-panel-btn" onclick="toggleFsPanel()" title="Narzędzia">☰</button>
+        <div id="fsPanel" class="fs-panel">
+          <div class="fs-panel-head">
+            <span class="fw-bold">Narzędzia</span>
+            <button type="button" class="btn btn-sm btn-outline-light fw-bold" onclick="toggleFullscreen()">✖ Zamknij pełny ekran</button>
+          </div>
+          <div id="fsPanelBody" class="fs-panel-body"></div>
+        </div>
       </div>
     </div>
     <div id="checkPanel" class="px-3 pt-3"></div>
@@ -301,6 +348,22 @@
     <div class="form-check mb-2">
       <input class="form-check-input" type="checkbox" id="distoAutoChk" checked onchange="setDistoAuto(this.checked)">
       <label class="form-check-label small fw-bold" for="distoAutoChk">W prowadzonym pomiarze zapisuj i przechodź dalej automatycznie</label>
+    </div>
+    <div class="border rounded p-2 mb-2">
+      <div class="form-check mb-1">
+        <input class="form-check-input" type="checkbox" id="distoSumaChk" onchange="setDistoSuma(this.checked)">
+        <label class="form-check-label small fw-bold" for="distoSumaChk">Tryb sumowania — mierzę ścianę na kilka razy</label>
+      </div>
+      <div class="small text-muted mb-1">Kolejne pomiary są dodawane do siebie. Do aplikacji trafia dopiero suma,
+        gdy naciśniesz <b>Zatwierdź sumę</b>. Przydaje się, gdy ściany nie da się zmierzyć jednym strzałem.</div>
+      <div class="d-flex align-items-center gap-2 flex-wrap">
+        <span class="fw-bold">Suma:</span>
+        <span class="fw-bold fs-5 text-primary" id="distoSumaValue">0.00 m</span>
+        <span class="small text-muted" id="distoSumaSklad"></span>
+        <button type="button" class="btn btn-sm btn-primary fw-bold ms-auto" onclick="distoZatwierdzSume()">Zatwierdź sumę</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="distoCofnijPomiar()">Cofnij ostatni</button>
+        <button type="button" class="btn btn-sm btn-outline-danger" onclick="distoWyzerujSume()">Wyzeruj</button>
+      </div>
     </div>
 
     <div class="border rounded p-2 mb-2" style="background:#f8f9fa;">
@@ -513,6 +576,12 @@
        „Lewa" i „prawa" liczą się względem kierunku rysowania; jeśli mur siadł nie po tej
        stronie, przerzuć go przyciskiem ⇄.</p>
     <input type="number" min="0" max="200" step="1" inputmode="numeric" id="thickInput" class="form-control form-control-sm mb-2 fw-bold" placeholder="np. 25">
+    <label class="small fw-bold text-muted mb-1">Oznaczenie przegrody</label>
+    <div class="d-flex gap-1 mb-2">
+      <input type="text" id="thickPrzegroda" class="form-control form-control-sm fw-bold" placeholder="np. SZ1">
+      <button type="button" class="btn btn-sm btn-outline-secondary text-nowrap" onclick="podpowiedzPrzegrode('SZ')">SZ</button>
+      <button type="button" class="btn btn-sm btn-outline-secondary text-nowrap" onclick="podpowiedzPrzegrode('SW')">SW</button>
+    </div>
     <label class="small fw-bold text-muted mb-1">Kolor ściany</label>
     <select id="thickColor" class="form-select form-select-sm mb-2" onchange="onThickColorChange()"></select>
     <label class="small fw-bold text-muted mb-1">Po której stronie linii leży mur</label>
@@ -602,6 +671,29 @@
       <button type="button" class="btn btn-danger btn-sm" id="obstacleDeleteBtn" style="display:none" onclick="deleteObstacle()">Usuń</button>
       <button type="button" class="btn btn-secondary btn-sm" onclick="closeObstacleDialog()">Anuluj</button>
       <button type="button" class="btn btn-primary btn-sm fw-bold" onclick="saveObstacle()">Zapisz</button>
+    </div>
+  </div>
+</div>
+
+<div id="punktOverlay" class="modal-overlay">
+  <div class="card shadow p-3" style="width: 340px;">
+    <h6 class="fw-bold mb-2 text-dark">✛ Punkt odniesienia</h6>
+    <div class="small text-muted mb-2" id="punktBazaInfo"></div>
+    <label class="small fw-bold text-muted mb-1">Odległość [cm]</label>
+    <input type="number" min="0" step="1" inputmode="numeric" id="punktDist" class="form-control form-control-sm mb-2 fw-bold" placeholder="np. 215">
+    <label class="small fw-bold text-muted mb-1">Kierunek</label>
+    <select id="punktKierunek" class="form-select form-select-sm mb-2">
+      <option value="wzdluz" id="punktWzdluzOpt">wzdłuż ściany</option>
+      <option value="prawo">w prawo</option>
+      <option value="lewo">w lewo</option>
+      <option value="gora">w górę</option>
+      <option value="dol">w dół</option>
+    </select>
+    <input type="text" id="punktOpis" class="form-control form-control-sm mb-2" placeholder="Opis (np. oś okna)">
+    <div class="d-flex justify-content-between">
+      <button type="button" class="btn btn-danger btn-sm" id="punktDeleteBtn" style="display:none" onclick="deletePunkt()">Usuń</button>
+      <button type="button" class="btn btn-secondary btn-sm" onclick="closePunktDialog()">Anuluj</button>
+      <button type="button" class="btn btn-primary btn-sm fw-bold" onclick="savePunkt()">Postaw punkt</button>
     </div>
   </div>
 </div>
@@ -834,6 +926,8 @@
     document.getElementById('thickInput').value = wallThicknessOf(l) || '';
     document.getElementById('thickSide').value = wallSideOf(l);
     wypelnijKolory(document.getElementById('thickColor'), (l && l.kolor) || defaultWallColor);
+    const pp = document.getElementById('thickPrzegroda');
+    if (pp) pp.value = (l && l.przegroda) ? l.przegroda : '';
     document.getElementById('thickApplyAll').checked = false;
     document.getElementById('thickOverlay').style.display = 'flex';
   }
@@ -857,6 +951,13 @@
   }
   function setThickPreset(v) { document.getElementById('thickInput').value = v; }
 
+  // Podpowiedź kolejnego numeru przegrody - SZ1, SZ2, ... - żeby nie trzeba
+  // było pamiętać, co już zostało użyte.
+  function podpowiedzPrzegrode(pref) {
+    const pole = document.getElementById('thickPrzegroda');
+    if (pole) pole.value = nastepnaPrzegroda(pref);
+  }
+
   function onThickColorChange() {
     const sel = document.getElementById('thickColor');
     if (sel) sel.style.borderLeft = '10px solid ' + kolorHex(sel.value, KOLOR_SCIANY_DOMYSLNY);
@@ -867,6 +968,8 @@
     if (v > MAX_THICKNESS_CM) { alert('Grubość ponad ' + MAX_THICKNESS_CM + ' cm wygląda na pomyłkę.'); return; }
     const str = document.getElementById('thickSide').value;
     const strona = STRONY.indexOf(str) === -1 ? 'os' : str;
+    const pp = document.getElementById('thickPrzegroda');
+    const przegroda = pp ? pp.value.trim().toUpperCase() : '';
     const selK = document.getElementById('thickColor');
     const kolor = (selK && KOLORY.some(k => k.id === selK.value)) ? selK.value : 'grafit';
     const ustaw = (l) => {
@@ -874,6 +977,9 @@
       if (kolor === 'grafit') delete l.kolor; else l.kolor = kolor;
       // 'os' zapisujemy jako brak pola - stare szkice i tak tak wygladaja
       if (strona === 'os') delete l.str; else l.str = strona;
+      // recznie wybrana strona nie moze byc nadpisywana przez tryb auto
+      if (autoStronaOn) delete l.strRecznie; else l.strRecznie = true;
+      if (przegroda) l.przegroda = przegroda; else delete l.przegroda;
     };
     const all = document.getElementById('thickApplyAll').checked;
     if (all) (objects.lines || []).forEach(ustaw);
@@ -929,7 +1035,7 @@
     autoDimOn = !!data.wymiarOdRazu;
     sketches.forEach(sk => {
       const o = sk.objects = sk.objects || {};
-      ['lines', 'freehand', 'labels', 'rooms', 'openings', 'noteLines', 'hatches', 'slopes', 'callouts', 'obstacles', 'proste']
+      ['lines', 'freehand', 'labels', 'rooms', 'openings', 'noteLines', 'hatches', 'slopes', 'callouts', 'obstacles', 'proste', 'punkty']
         .forEach(k => { if (!Array.isArray(o[k])) o[k] = []; });
       if (!o.customDims) o.customDims = {};
       if (!o.apexDims) o.apexDims = {};
@@ -943,7 +1049,7 @@
   function newProjectData() {
     sketches = [{ id: Date.now(), name: 'Szkic 1', kind: 'rzut', height: '',
       objects: { lines: [], freehand: [], labels: [], rooms: [], openings: [], customDims: {},
-                 noteLines: [], apexDims: {}, hatches: [], slopes: [], callouts: [], obstacles: [], proste: [] },
+                 noteLines: [], apexDims: {}, hatches: [], slopes: [], callouts: [], obstacles: [], proste: [], punkty: [] },
       panX: -750, panY: -750, zoomLevel: 1, showDimensions: true }];
     currentSketchIndex = 0;
     objects = sketches[0].objects;
@@ -2336,6 +2442,553 @@
     };
   }
 
+  // ================= POGRUBIANIE ŚCIAN NA ZEWNĄTRZ =================
+  //
+  // Sposób pracy, o który tu chodzi: najpierw rysujesz cały rzut ścianami
+  // o grubości 0, wymiarując ŚWIATŁO pomieszczeń — czyli to, co realnie
+  // zmierzyłeś dalmierzem w środku. Dopiero potem nadajesz ścianom grubość.
+  //
+  // Zasada nadrzędna: JUŻ NARYSOWANA PRZESTRZEŃ WEWNĘTRZNA NIE MOŻE SIĘ ZMIENIĆ.
+  // Grubość ma dorastać na zewnątrz, nigdy do środka.
+  //
+  //   ściana zewnętrzna  narysowana linia jest licem wewnętrznym, mur wyrasta
+  //                      na zewnątrz. Geometria nie rusza się wcale, zmienia się
+  //                      tylko obrys zewnętrzny budynku.
+  //
+  //   ściana wewnętrzna  narysowana linia jest licem od strony jednego z pokoi.
+  //                      Drugi pokój wraz z całą resztą rysunku po tamtej stronie
+  //                      odsuwa się o grubość muru. Oba pokoje zachowują swoje
+  //                      światło, a budynek rośnie — dokładnie tak, jak jest
+  //                      naprawdę.
+  //
+  // Wymiary całych ścian, które przez to fizycznie się wydłużyły, są korygowane
+  // o tę samą wartość. Wymiary pojedynczych odcinków zostają nietknięte, bo
+  // opisują światło pomieszczeń, a ono się nie zmieniło.
+
+  const POGRUB_EPS = 1.5;          // px - tolerancja "punkt leży na ścianie"
+  const POGRUB_PROBA = 7;          // px - jak daleko od ściany szukamy wnętrza
+
+  function normalnaSciany(line) {
+    const dx = line.x2 - line.x1, dy = line.y2 - line.y1;
+    const len = Math.hypot(dx, dy);
+    if (len < 0.001) return null;
+    return { nx: -dy / len, ny: dx / len, ax: line.x1, ay: line.y1, len: len };
+  }
+
+  function stronaPunktu(line, p) {
+    const n = normalnaSciany(line);
+    if (!n) return 0;
+    return (p.x - n.ax) * n.nx + (p.y - n.ay) * n.ny;
+  }
+
+  // Czy tuż obok ściany, po zadanej stronie, jest wnętrze jakiegoś pomieszczenia.
+  function wnetrzePoStronie(line, znak) {
+    const n = normalnaSciany(line);
+    if (!n) return false;
+    const sx = (line.x1 + line.x2) / 2 + n.nx * POGRUB_PROBA * znak;
+    const sy = (line.y1 + line.y2) / 2 + n.ny * POGRUB_PROBA * znak;
+    return innerFaces().some(f => pointInPolygon({ x: sx, y: sy }, f));
+  }
+
+  // Ściana jest wewnętrzna, gdy pomieszczenia są po obu jej stronach.
+  // Zewnętrzna ma wnętrze tylko z jednej strony - i to po drugiej ma rosnąć mur.
+  function rodzajSciany(line) {
+    const plus = wnetrzePoStronie(line, 1);
+    const minus = wnetrzePoStronie(line, -1);
+    if (plus && minus) return { rodzaj: 'wewnetrzna', wnetrzePlus: true };
+    if (plus) return { rodzaj: 'zewnetrzna', wnetrzePlus: true };
+    if (minus) return { rodzaj: 'zewnetrzna', wnetrzePlus: false };
+    return { rodzaj: 'wolna', wnetrzePlus: true };
+  }
+
+  // Wszystkie punkty rysunku, pogrupowane w obiekty. Przesuwamy je punkt po
+  // punkcie, ale punkty leżące DOKŁADNIE na ścianie rozstrzygamy po tym, po
+  // której stronie leży cały obiekt - inaczej lico odsuwanego pokoju zostałoby
+  // na miejscu i pokój urósłby o grubość muru.
+  function zbierzObiektyPunktowe() {
+    const grupy = [];
+    (objects.lines || []).forEach(l => grupy.push({ obj: l, pola: [['x1', 'y1'], ['x2', 'y2']], typ: 'line' }));
+    (objects.proste || []).forEach(l => grupy.push({ obj: l, pola: [['x1', 'y1'], ['x2', 'y2']] }));
+    (objects.noteLines || []).forEach(l => grupy.push({ obj: l, pola: [['x1', 'y1'], ['x2', 'y2']] }));
+    (objects.slopes || []).forEach(l => grupy.push({ obj: l, pola: [['x1', 'y1'], ['x2', 'y2']] }));
+    (objects.openings || []).forEach(o => grupy.push({ obj: o, pola: [['x', 'y']] }));
+    (objects.labels || []).forEach(o => grupy.push({ obj: o, pola: [['x', 'y']] }));
+    (objects.callouts || []).forEach(o => grupy.push({ obj: o, pola: [['x', 'y'], ['tx', 'ty']] }));
+    (objects.rooms || []).forEach(r => grupy.push({ obj: r, polygon: true }));
+    (objects.hatches || []).forEach(h => grupy.push({ obj: h, polygon: true }));
+    (objects.obstacles || []).forEach(o => grupy.push({ obj: o, polygon: true }));
+    (objects.freehand || []).forEach(f => grupy.push({ obj: f, path: true }));
+    return grupy;
+  }
+
+  function srodekObiektu(g) {
+    const pkt = [];
+    if (g.polygon) (g.obj.polygon || []).forEach(p => pkt.push(p));
+    else if (g.path) (g.obj.path || []).forEach(p => pkt.push(p));
+    else g.pola.forEach(([fx, fy]) => {
+      if (isFinite(g.obj[fx]) && isFinite(g.obj[fy])) pkt.push({ x: g.obj[fx], y: g.obj[fy] });
+    });
+    if (!pkt.length) return null;
+    return { x: pkt.reduce((a, p) => a + p.x, 0) / pkt.length,
+             y: pkt.reduce((a, p) => a + p.y, 0) / pkt.length };
+  }
+
+  // Odsunięcie wszystkiego, co leży po stronie `znak` ściany `line`, o `delta` px.
+  function odsunStrone(line, znak, delta, pomijanaLinia) {
+    if (Math.abs(delta) < 0.001) return;
+    const n = normalnaSciany(line);
+    if (!n) return;
+    const dx = n.nx * delta * znak, dy = n.ny * delta * znak;
+
+    zbierzObiektyPunktowe().forEach(g => {
+      if (g.obj === pomijanaLinia) return;
+      const sr = srodekObiektu(g);
+      const stronaObiektu = sr ? stronaPunktu(line, sr) * znak : 0;
+
+      const rusz = (p) => {
+        const s = stronaPunktu(line, p) * znak;
+        if (s > POGRUB_EPS) return true;
+        if (s < -POGRUB_EPS) return false;
+        // punkt leży na ścianie - decyduje położenie całego obiektu
+        return stronaObiektu > POGRUB_EPS;
+      };
+
+      if (g.polygon) {
+        (g.obj.polygon || []).forEach(p => { if (rusz(p)) { p.x += dx; p.y += dy; } });
+        if (g.obj.centroid && typeof getVisualCenter === 'function') {
+          g.obj.centroid = getVisualCenter(g.obj.polygon);
+        }
+      } else if (g.path) {
+        (g.obj.path || []).forEach(p => { if (rusz(p)) { p.x += dx; p.y += dy; } });
+      } else {
+        g.pola.forEach(([fx, fy]) => {
+          if (!isFinite(g.obj[fx]) || !isFinite(g.obj[fy])) return;
+          if (rusz({ x: g.obj[fx], y: g.obj[fy] })) { g.obj[fx] += dx; g.obj[fy] += dy; }
+        });
+      }
+    });
+  }
+
+  // Nadanie ścianie grubości rosnącej na zewnątrz.
+  // Zwraca opis tego, co się stało - potrzebny do sensownego komunikatu.
+  function pogrubSciane(index, nowaGrCm) {
+    const line = (objects.lines || [])[index];
+    if (!line) return { blad: 'brak-sciany' };
+    const n = normalnaSciany(line);
+    if (!n) return { blad: 'brak-sciany' };
+
+    const stara = line.grZewn ? (parseFloat(line.gr) || 0) : 0;
+    const nowa = Math.max(0, Math.min(parseFloat(nowaGrCm) || 0, MAX_THICKNESS_CM));
+    const deltaPx = (nowa - stara) / 100 * PIXELS_PER_METER;
+
+    const info = rodzajSciany(line);
+
+    // długości ścian sprzed operacji - po niej korygujemy o nie wymiary
+    const dlugosciPrzed = (objects.lines || []).map(l => Math.hypot(l.x2 - l.x1, l.y2 - l.y1));
+    const zakotwiczone = anchorCustomDims();
+
+    if (info.rodzaj === 'wewnetrzna') {
+      // mur wchodzi w przestrzeń, więc odsuwamy jedną stronę rysunku.
+      // Wybieramy tę z mniejszą liczbą punktów - rysunek mniej podskakuje.
+      const znak = stronaZMniejszaLiczbaPunktow(line);
+      odsunStrone(line, znak, deltaPx, line);
+      line.str = (znak > 0) ? 'prawa' : 'lewa';
+    } else {
+      // ściana zewnętrzna: geometria bez zmian, mur wyrasta na zewnątrz
+      line.str = info.wnetrzePlus ? 'lewa' : 'prawa';
+    }
+
+    if (nowa > 0) { line.gr = nowa; line.grZewn = true; }
+    else { delete line.gr; delete line.grZewn; delete line.str; }
+
+    // ściany, które fizycznie się wydłużyły, dostają odpowiednio większy wymiar
+    korygujWymiaryCalychScian(zakotwiczone, dlugosciPrzed);
+    rekeyCustomDims(zakotwiczone);
+    if (typeof refreshCornerOpenings === 'function') refreshCornerOpenings();
+
+    return { rodzaj: info.rodzaj, delta: nowa - stara };
+  }
+
+  function stronaZMniejszaLiczbaPunktow(line) {
+    let plus = 0, minus = 0;
+    (objects.lines || []).forEach(l => {
+      [[l.x1, l.y1], [l.x2, l.y2]].forEach(([x, y]) => {
+        const s = stronaPunktu(line, { x: x, y: y });
+        if (s > POGRUB_EPS) plus++;
+        else if (s < -POGRUB_EPS) minus++;
+      });
+    });
+    return plus <= minus ? 1 : -1;
+  }
+
+  // Wymiar CAŁEJ ściany opisuje jej długość, a ta po odsunięciu części rysunku
+  // faktycznie urosła. Wymiary pojedynczych odcinków zostawiamy - opisują
+  // światło pomieszczeń, które z założenia się nie zmieniło.
+  function korygujWymiaryCalychScian(zakotwiczone, dlugosciPrzed) {
+    zakotwiczone.kotwy.forEach(k => {
+      if (!(k.t1 < 0.02 && k.t2 > 0.98)) return;      // to nie jest cała ściana
+      const line = objects.lines[k.lineIndex];
+      if (!line) return;
+      const przed = dlugosciPrzed[k.lineIndex];
+      const po = Math.hypot(line.x2 - line.x1, line.y2 - line.y1);
+      const roznicaM = (po - przed) / PIXELS_PER_METER;
+      if (Math.abs(roznicaM) < 0.005) return;
+      const stary = parseFloat(k.data && k.data.val);
+      if (!isFinite(stary)) return;
+      k.data.val = (stary + roznicaM).toFixed(2);
+    });
+  }
+
+  // --- obsługa z okna ściany ---
+
+  function pogrubZOkna(index, grCm, wszystkie) {
+    const przed = (objects.rooms || []).map(r => r.area);
+    let wynik = null;
+    if (wszystkie) {
+      // od najdalszych do najbliższych nie ma znaczenia - każda operacja
+      // przelicza się od nowa na aktualnym rysunku
+      for (let i = 0; i < objects.lines.length; i++) wynik = pogrubSciane(i, grCm);
+    } else {
+      wynik = pogrubSciane(index, grCm);
+    }
+    recalculateRooms();
+    const po = (objects.rooms || []).map(r => r.area);
+    const zmienione = przed.filter((a, i) => a !== po[i]).length;
+    return { wynik: wynik, zmienionePomieszczenia: zmienione };
+  }
+
+  // Obrys zewnętrzny budynku: światło powiększone o grubości ścian zewnętrznych.
+  // Liczba pomocnicza do tabeli - nie rusza niczego w silniku wymiarowania.
+  function obrysZewnetrzny() {
+    const linie = objects.lines || [];
+    if (!linie.length) return null;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    linie.forEach(l => {
+      const gr = (l.grZewn ? (parseFloat(l.gr) || 0) : 0) / 100 * PIXELS_PER_METER;
+      const n = normalnaSciany(l);
+      const naZewnatrz = (l.str === 'prawa') ? 1 : -1;
+      [[l.x1, l.y1], [l.x2, l.y2]].forEach(([x, y]) => {
+        const px = x + (n ? n.nx * gr * naZewnatrz : 0);
+        const py = y + (n ? n.ny * gr * naZewnatrz : 0);
+        minX = Math.min(minX, x, px); maxX = Math.max(maxX, x, px);
+        minY = Math.min(minY, y, py); maxY = Math.max(maxY, y, py);
+      });
+    });
+    if (!isFinite(minX)) return null;
+    return {
+      szer: (maxX - minX) / PIXELS_PER_METER,
+      wys: (maxY - minY) / PIXELS_PER_METER
+    };
+  }
+
+  // ================= LICA ŚCIAN JAKO PUNKTY PRZYCIĄGANIA =================
+  //
+  // Gdy ściana ma grubość, rysując przy niej kolejne pomieszczenie chcesz trafić
+  // w jej LICO, a nie w oś. Dotąd przyciąganie znało tylko oś, więc nowy pokój
+  // zaczynał się w środku muru i wchodził w pomieszczenie obok — grubość ściany
+  // była po prostu pomijana.
+  //
+  // Teraz każda ściana z grubością podstawia dodatkowo swoje lica: odsunięte
+  // równolegle o tyle, ile wynika z grubości i z tego, po której stronie leży mur.
+
+  function licaSciany(line) {
+    const gr = (typeof wallThicknessPx === 'function') ? wallThicknessPx(line) : 0;
+    if (gr <= 0) return [];
+    const n = normalnaSciany(line);
+    if (!n) return [];
+    const srodek = wallBandOffsetPx(line);     // przesunięcie środka pasa
+    const lica = [srodek - gr / 2, srodek + gr / 2];
+    return lica
+      .filter(o => Math.abs(o) > 0.5)           // lico pokrywające się z osią już mamy
+      .map(o => ({
+        x1: line.x1 + n.nx * o, y1: line.y1 + n.ny * o,
+        x2: line.x2 + n.nx * o, y2: line.y2 + n.ny * o,
+        zrodlo: line
+      }));
+  }
+
+  function wszystkieLica() {
+    const out = [];
+    (objects.lines || []).forEach(l => licaSciany(l).forEach(f => out.push(f)));
+    return out;
+  }
+
+  // ================= STRONA MURU USTALANA SAMA =================
+  //
+  // Wybór „pas: lewa / oś / prawa" wymagał od użytkownika myślenia w kategoriach
+  // kierunku rysowania — przy obrysie zewnętrznym dawało się to znieść, przy
+  // ścianach wewnętrznych robiło się z tego zgadywanie. Program potrafi ustalić
+  // to sam: mur ma rosnąć tam, gdzie NIE MA pomieszczenia.
+  function ustalStronySamodzielnie() {
+    let zmienione = 0;
+    (objects.lines || []).forEach(line => {
+      if (!wallThicknessOf(line)) return;
+      if (line.strRecznie) return;            // użytkownik wybrał sam - nie nadpisujemy
+      const info = rodzajSciany(line);
+      let nowa;
+      if (info.rodzaj === 'zewnetrzna') nowa = info.wnetrzePlus ? 'lewa' : 'prawa';
+      else nowa = 'os';                        // wewnętrzna: mur po połowie na każdą stronę
+      if (line.str !== nowa) {
+        if (nowa === 'os') delete line.str; else line.str = nowa;
+        zmienione++;
+      }
+    });
+    return zmienione;
+  }
+
+  let autoStronaOn = true;
+  function toggleAutoStrona() {
+    autoStronaOn = !autoStronaOn;
+    const b = document.getElementById('btnAutoStrona');
+    if (b) {
+      b.classList.toggle('btn-secondary', autoStronaOn);
+      b.classList.toggle('btn-outline-secondary', !autoStronaOn);
+      b.innerText = autoStronaOn ? '🧱 Mur na zewnątrz: auto' : '🧱 Mur na zewnątrz: ręcznie';
+    }
+    if (autoStronaOn) { ustalStronySamodzielnie(); renderCanvas(); }
+    saveProjectToStorage();
+  }
+
+  function przeliczStrony() {
+    if (!autoStronaOn) return 0;
+    return ustalStronySamodzielnie();
+  }
+
+  // ================= PUNKT ODNIESIENIA =================
+  //
+  // Narzędzie do wyznaczania miejsca, którego nie da się wskazać palcem:
+  // „2,15 m od lewego narożnika", „80 cm od krawędzi okna". Klikasz punkt
+  // odniesienia, podajesz odległość i kierunek — program stawia znacznik
+  // dokładnie tam. Znacznik jest punktem przyciągania, więc kolejna ściana
+  // zaczyna się w nim co do milimetra.
+  //
+  // Znacznik NIE jest ścianą ani wymiarem: nie tworzy pomieszczeń, nie wchodzi
+  // do obliczeń. Jest tym, czym ołówkowy krzyżyk na ścianie — miejscem.
+
+  function ensurePunkty() {
+    if (!objects.punkty) objects.punkty = [];
+    return objects.punkty;
+  }
+
+  const PUNKT_R = 7;
+
+  // Kandydaci na punkt odniesienia: narożniki ścian, krawędzie i środki otworów,
+  // wcześniej postawione znaczniki. Czyli wszystko, od czego realnie się mierzy.
+  function punktyOdniesienia() {
+    const lista = [];
+    (objects.lines || []).forEach((l, i) => {
+      lista.push({ x: l.x1, y: l.y1, opis: 'narożnik ściany ' + (i + 1) });
+      lista.push({ x: l.x2, y: l.y2, opis: 'narożnik ściany ' + (i + 1) });
+    });
+    (objects.openings || []).forEach(op => {
+      const w = (typeof openingWidthPx === 'function') ? openingWidthPx(op) : 0;
+      const a = op.angle || 0;
+      const ux = Math.cos(a), uy = Math.sin(a);
+      lista.push({ x: op.x, y: op.y, opis: 'środek ' + op.id });
+      lista.push({ x: op.x - ux * w / 2, y: op.y - uy * w / 2, opis: 'krawędź ' + op.id });
+      lista.push({ x: op.x + ux * w / 2, y: op.y + uy * w / 2, opis: 'krawędź ' + op.id });
+    });
+    (objects.punkty || []).forEach((p, i) => {
+      lista.push({ x: p.x, y: p.y, opis: p.opis || ('punkt ' + (i + 1)) });
+    });
+    return lista;
+  }
+
+  function najblizszyPunktOdniesienia(pos, tolPx) {
+    const tol = (tolPx || 30) / (zoomLevel || 1);
+    let best = null, bestD = tol;
+    punktyOdniesienia().forEach(p => {
+      const d = Math.hypot(pos.x - p.x, pos.y - p.y);
+      if (d < bestD) { bestD = d; best = p; }
+    });
+    return best;
+  }
+
+  function findPunktAt(pos) {
+    const lista = objects.punkty || [];
+    const tol = 16 / (zoomLevel || 1);
+    for (let i = lista.length - 1; i >= 0; i--) {
+      if (Math.hypot(pos.x - lista[i].x, pos.y - lista[i].y) < tol) return i;
+    }
+    return -1;
+  }
+
+  // Wyliczenie położenia znacznika: od punktu bazowego, o zadaną odległość,
+  // w jednym z czterech kierunków albo wzdłuż wskazanej ściany.
+  function pozycjaPunktu(baza, kierunek, dystCm, line) {
+    const d = (parseFloat(dystCm) || 0) / 100 * PIXELS_PER_METER;
+    if (kierunek === 'wzdluz' && line) {
+      // wzdłuż ściany, w stronę jej drugiego końca względem punktu bazowego
+      const doA = Math.hypot(baza.x - line.x1, baza.y - line.y1);
+      const doB = Math.hypot(baza.x - line.x2, baza.y - line.y2);
+      const cel = (doA <= doB) ? { x: line.x2, y: line.y2 } : { x: line.x1, y: line.y1 };
+      const len = Math.hypot(cel.x - baza.x, cel.y - baza.y);
+      if (len < 1) return { x: baza.x, y: baza.y };
+      return { x: baza.x + (cel.x - baza.x) / len * d, y: baza.y + (cel.y - baza.y) / len * d };
+    }
+    const kier = { prawo: [1, 0], lewo: [-1, 0], dol: [0, 1], gora: [0, -1] }[kierunek] || [1, 0];
+    return { x: baza.x + kier[0] * d, y: baza.y + kier[1] * d };
+  }
+
+  function drawPunkty() {
+    (objects.punkty || []).forEach(p => {
+      ctx.save();
+      // krzyżyk, nie kropka - kropkę myli się z węzłem ściany
+      ctx.strokeStyle = '#6f42c1'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(p.x - PUNKT_R, p.y); ctx.lineTo(p.x + PUNKT_R, p.y);
+      ctx.moveTo(p.x, p.y - PUNKT_R); ctx.lineTo(p.x, p.y + PUNKT_R);
+      ctx.stroke();
+      ctx.beginPath(); ctx.arc(p.x, p.y, PUNKT_R + 3, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(111,66,193,0.55)'; ctx.lineWidth = 1.5; ctx.stroke();
+      if (p.baza) {
+        // cienka linia do punktu, od którego mierzyliśmy - widać, skąd się wziął
+        ctx.beginPath(); ctx.setLineDash([4, 4]); ctx.lineWidth = 1.5;
+        ctx.moveTo(p.baza.x, p.baza.y); ctx.lineTo(p.x, p.y); ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      if (p.opis) {
+        ctx.font = 'bold 12px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        const w = ctx.measureText(p.opis).width + 10;
+        ctx.fillStyle = 'rgba(255,255,255,0.9)';
+        ctx.fillRect(p.x - w / 2, p.y - PUNKT_R - 20, w, 17);
+        ctx.fillStyle = '#6f42c1';
+        ctx.fillText(p.opis, p.x, p.y - PUNKT_R - 12);
+      }
+      ctx.restore();
+    });
+  }
+
+  // --- okno dialogowe ---
+  let pendingPunktBaza = null;
+  let pendingPunktLine = null;
+  let editingPunktIndex = -1;
+
+  function openPunktDialog(baza, line, editIndex) {
+    editingPunktIndex = (editIndex === undefined) ? -1 : editIndex;
+    pendingPunktBaza = baza;
+    pendingPunktLine = line || null;
+    const p = editingPunktIndex >= 0 ? objects.punkty[editingPunktIndex] : null;
+    document.getElementById('punktDist').value = p ? (p.dyst || '') : '';
+    document.getElementById('punktKierunek').value = p ? (p.kierunek || 'wzdluz') : 'wzdluz';
+    document.getElementById('punktOpis').value = p ? (p.opis || '') : '';
+    const info = document.getElementById('punktBazaInfo');
+    if (info) info.innerText = baza && baza.opis
+      ? 'Mierzymy od: ' + baza.opis
+      : 'Mierzymy od wskazanego punktu.';
+    const wzdluz = document.getElementById('punktWzdluzOpt');
+    if (wzdluz) wzdluz.disabled = !pendingPunktLine;
+    if (!pendingPunktLine && document.getElementById('punktKierunek').value === 'wzdluz') {
+      document.getElementById('punktKierunek').value = 'prawo';
+    }
+    document.getElementById('punktDeleteBtn').style.display = editingPunktIndex >= 0 ? 'inline-block' : 'none';
+    document.getElementById('punktOverlay').style.display = 'flex';
+    setTimeout(() => { try { document.getElementById('punktDist').focus(); } catch (e) {} }, 50);
+  }
+
+  function closePunktDialog() {
+    editingPunktIndex = -1; pendingPunktBaza = null; pendingPunktLine = null;
+    document.getElementById('punktOverlay').style.display = 'none';
+    renderCanvas();
+  }
+
+  function savePunkt() {
+    const dyst = parseFloat(String(document.getElementById('punktDist').value).replace(',', '.'));
+    if (!isFinite(dyst) || dyst < 0) { alert('Podaj odległość w centymetrach, np. 215'); return; }
+    const kierunek = document.getElementById('punktKierunek').value;
+    const opis = document.getElementById('punktOpis').value.trim();
+
+    if (editingPunktIndex >= 0) {
+      const p = objects.punkty[editingPunktIndex];
+      const baza = p.baza || pendingPunktBaza;
+      const poz = pozycjaPunktu(baza, kierunek, dyst, pendingPunktLine || p.line);
+      p.x = poz.x; p.y = poz.y; p.dyst = dyst; p.kierunek = kierunek; p.opis = opis;
+    } else {
+      if (!pendingPunktBaza) { closePunktDialog(); return; }
+      const poz = pozycjaPunktu(pendingPunktBaza, kierunek, dyst, pendingPunktLine);
+      ensurePunkty().push({
+        x: poz.x, y: poz.y, dyst: dyst, kierunek: kierunek, opis: opis,
+        baza: { x: pendingPunktBaza.x, y: pendingPunktBaza.y }
+      });
+    }
+    closePunktDialog();
+    saveStateToHistory(); renderCanvas(); saveProjectToStorage();
+  }
+
+  function deletePunkt() {
+    if (editingPunktIndex < 0) return;
+    objects.punkty.splice(editingPunktIndex, 1);
+    closePunktDialog();
+    saveStateToHistory(); renderCanvas(); saveProjectToStorage();
+  }
+
+  // ================= OZNACZENIA PRZEGRÓD =================
+  //
+  // Etykieta typu SZ1, SZ2 przypinana do ściany. Sama w sobie niczego nie liczy —
+  // jest oznaczeniem, do którego odwołujesz się w opisie czy w zestawieniu.
+  // Ta sama przegroda może wystąpić na wielu ścianach: SZ1 to jeden typ muru,
+  // nie jedna ściana.
+
+  const PRZEGRODY = [
+    { pref: 'SZ', nazwa: 'Ściana zewnętrzna' },
+    { pref: 'SW', nazwa: 'Ściana wewnętrzna' },
+    { pref: 'ST', nazwa: 'Strop' },
+    { pref: 'PG', nazwa: 'Podłoga na gruncie' },
+    { pref: 'DA', nazwa: 'Dach' }
+  ];
+
+  function przegrodaNazwa(tag) {
+    const up = String(tag || '').toUpperCase();
+    let best = null;
+    PRZEGRODY.forEach(p => { if (up.indexOf(p.pref) === 0 && (!best || p.pref.length > best.pref.length)) best = p; });
+    return best ? best.nazwa : 'Przegroda';
+  }
+
+  function nastepnaPrzegroda(pref) {
+    let max = 0;
+    sketches.forEach(sk => (sk.objects.lines || []).forEach(l => {
+      const m = new RegExp('^' + pref + '(\\d+)$', 'i').exec(String(l.przegroda || ''));
+      if (m) max = Math.max(max, parseInt(m[1], 10));
+    }));
+    return pref + (max + 1);
+  }
+
+  // Zestawienie przegród: który tag, na ilu ścianach, jaka łączna długość.
+  function zestawieniePrzegrod(sketch) {
+    const sk = sketch || sketches[currentSketchIndex];
+    if (!sk) return [];
+    const mapa = {};
+    (sk.objects.lines || []).forEach(l => {
+      if (!l.przegroda) return;
+      const k = String(l.przegroda).toUpperCase();
+      if (!mapa[k]) mapa[k] = { tag: k, nazwa: przegrodaNazwa(k), ile: 0, dlugosc: 0, gr: l.gr || null };
+      mapa[k].ile++;
+      mapa[k].dlugosc += Math.hypot(l.x2 - l.x1, l.y2 - l.y1) / PIXELS_PER_METER;
+    });
+    return Object.values(mapa).sort((a, b) => a.tag.localeCompare(b.tag));
+  }
+
+  function drawPrzegrody() {
+    if (!showWallLabels) return;      // razem z oznaczeniami ścian
+    (objects.lines || []).forEach(l => {
+      if (!l.przegroda) return;
+      const cx = (l.x1 + l.x2) / 2, cy = (l.y1 + l.y2) / 2;
+      const n = normalnaSciany(l);
+      const gr = (typeof wallThicknessPx === 'function') ? wallThicknessPx(l) : 0;
+      const odsun = gr / 2 + 16;
+      const px = cx + (n ? n.nx * odsun : 0), py = cy + (n ? n.ny * odsun : 0);
+      ctx.save();
+      ctx.font = 'bold 13px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      const w = ctx.measureText(l.przegroda).width + 12;
+      ctx.fillStyle = '#fff'; ctx.strokeStyle = '#495057'; ctx.lineWidth = 1.5;
+      ctx.fillRect(px - w / 2, py - 10, w, 20);
+      ctx.strokeRect(px - w / 2, py - 10, w, 20);
+      ctx.fillStyle = '#495057';
+      ctx.fillText(String(l.przegroda), px, py);
+      ctx.restore();
+    });
+  }
+
   // ================= WYMIAR OD RAZU PO NARYSOWANIU =================
   //
   // Tryb pracy „ściana po ścianie": rysujesz odcinek, natychmiast wyskakuje
@@ -3358,6 +4011,7 @@
     (obj.hatches||[]).forEach(h => (h.polygon||[]).forEach(pt => put(pt.x, pt.y)));
     (obj.slopes||[]).forEach(s => { put(s.x1, s.y1); put(s.x2, s.y2); });
     (obj.proste||[]).forEach(s => { put(s.x1, s.y1); put(s.x2, s.y2); });
+    (obj.punkty||[]).forEach(p => { put(p.x - 20, p.y - 30); put(p.x + 20, p.y + 20); });
 
     // Etykiety i chmurki mierzymy DOKLADNIE tak, jak beda narysowane -
     // przez te same labelBox / calloutBox, razem z lamaniem tekstu na linie.
@@ -4638,7 +5292,51 @@
     return null;
   }
 
+  let distoSumaOn = false;
+  let distoSkladniki = [];
+
+  function setDistoSuma(v) {
+    distoSumaOn = !!v;
+    if (!distoSumaOn) distoSkladniki = [];
+    renderDistoSuma();
+  }
+
+  function renderDistoSuma() {
+    const suma = distoSkladniki.reduce((a, b) => a + b, 0);
+    const el = document.getElementById('distoSumaValue');
+    if (el) el.innerText = suma.toFixed(2) + ' m';
+    const sk = document.getElementById('distoSumaSklad');
+    if (sk) sk.innerText = distoSkladniki.length
+      ? '(' + distoSkladniki.map(v => v.toFixed(2)).join(' + ') + ')'
+      : '';
+  }
+
+  function distoWyzerujSume() { distoSkladniki = []; renderDistoSuma(); }
+
+  function distoCofnijPomiar() { distoSkladniki.pop(); renderDistoSuma(); }
+
+  function distoZatwierdzSume() {
+    const suma = distoSkladniki.reduce((a, b) => a + b, 0);
+    if (suma <= 0) { alert('Nie ma jeszcze czego zatwierdzać — zmierz przynajmniej jeden odcinek.'); return; }
+    distoSkladniki = [];
+    renderDistoSuma();
+    // sume wpisujemy tak samo jak zwykly pomiar, ale juz bez sumowania
+    const byl = distoSumaOn;
+    distoSumaOn = false;
+    distoDeliverMeasurement(suma);
+    distoSumaOn = byl;
+  }
+
   function distoDeliverMeasurement(meters) {
+    if (distoSumaOn) {
+      // w trybie sumowania odczyt tylko dokladamy do listy - nic nie trafia
+      // jeszcze do pola, bo pomiar sciany nie jest skonczony
+      distoSkladniki.push(meters);
+      renderDistoSuma();
+      distoLogAdd('dodano do sumy: ' + meters.toFixed(2) + ' m');
+      showDistoToast(meters);
+      return;
+    }
     const target = distoActiveTarget();
     if (!target) {
       // nic nie czeka na wartość — pokazujemy ją, żeby nie przepadła
@@ -4813,7 +5511,7 @@
 
   function switchSketch(index) {
     if (sketches[currentSketchIndex]) { sketches[currentSketchIndex].panX = panX; sketches[currentSketchIndex].panY = panY; sketches[currentSketchIndex].zoomLevel = zoomLevel; sketches[currentSketchIndex].showDimensions = showDimensions; }
-    currentSketchIndex = index; objects = sketches[index].objects; if(!objects.customDims) objects.customDims = {}; if(!objects.noteLines) objects.noteLines = []; if(!objects.apexDims) objects.apexDims = {}; if(!objects.hatches) objects.hatches = []; if(!objects.slopes) objects.slopes = []; if(!objects.callouts) objects.callouts = []; if(!objects.obstacles) objects.obstacles = []; if(!objects.proste) objects.proste = [];
+    currentSketchIndex = index; objects = sketches[index].objects; if(!objects.customDims) objects.customDims = {}; if(!objects.noteLines) objects.noteLines = []; if(!objects.apexDims) objects.apexDims = {}; if(!objects.hatches) objects.hatches = []; if(!objects.slopes) objects.slopes = []; if(!objects.callouts) objects.callouts = []; if(!objects.obstacles) objects.obstacles = []; if(!objects.proste) objects.proste = []; if(!objects.punkty) objects.punkty = [];
     panX = sketches[index].panX; panY = sketches[index].panY; zoomLevel = sketches[index].zoomLevel;
     showDimensions = (sketches[index].showDimensions !== undefined) ? sketches[index].showDimensions : true;
     syncDimsToggleButton(); syncSketchHeightInput();
@@ -5499,6 +6197,14 @@
                   html += `</tbody></table>`;
               }
           }
+          const przeg = (typeof zestawieniePrzegrod === 'function') ? zestawieniePrzegrod(sketch) : [];
+          if (przeg.length) {
+              html += `<h6 class="text-primary fw-bold mt-2">Przegrody:</h6><table class="table table-sm table-bordered"><thead><tr class="table-light"><th>Oznaczenie</th><th>Rodzaj</th><th>Grubość (cm)</th><th>Liczba ścian</th><th>Długość razem (m)</th></tr></thead><tbody>`;
+              przeg.forEach(p2 => {
+                  html += `<tr><td class="fw-bold">${p2.tag}</td><td>${p2.nazwa}</td><td>${p2.gr || '–'}</td><td>${p2.ile}</td><td>${p2.dlugosc.toFixed(2)}</td></tr>`;
+              });
+              html += `</tbody></table>`;
+          }
           const przeszkody = sketch.objects.obstacles || [];
           if (przeszkody.length) {
               html += `<h6 class="text-primary fw-bold mt-2">Przeszkody:</h6><table class="table table-sm table-bordered"><thead><tr class="table-light"><th>Opis</th><th>Wymiary</th><th>Pow. (m²)</th><th>Kolor</th><th>Odejmowana</th><th></th></tr></thead><tbody>`;
@@ -5591,6 +6297,7 @@
     hatch:    ['btnModeHatch',    'btn-outline-secondary','btn-secondary'],
     obstacle: ['btnModeObstacle', 'btn-outline-dark',     'btn-dark'],
     prosta:   ['btnModeProsta',   'btn-outline-danger',  'btn-danger'],
+    punkt:    ['btnModePunkt',    'btn-outline-dark',    'btn-dark'],
     roomtag:  ['btnModeRoomTag',  'btn-outline-success', 'btn-success'],
     slope:    ['btnModeSlope',    'btn-outline-danger', 'btn-danger'],
     draw:     ['btnModeDraw',     'btn-outline-primary', 'btn-primary'],
@@ -6089,6 +6796,10 @@
   // od bliższego jej narożnika. Pomoc przy szkicowaniu — jak podgląd długości
   // podczas rysowania, nic tu się nie zapisuje.
   let wallHover = null;
+  // zapamietany punkt odniesienia: klucz odcinka + ktory jego koniec
+  let wallHoverAnchor = null;
+
+  function resetWallHoverAnchor() { wallHoverAnchor = null; }
 
   function updateWallHover(pos) {
     wallHover = null;
@@ -6104,7 +6815,7 @@
         if (d < bestD) { bestD = d; best = { a, b, pt, key: getSegKey(a.x, a.y, b.x, b.y) }; }
       });
     });
-    if (!best) return;
+    if (!best) { wallHoverAnchor = null; return; }
 
     const total = Math.hypot(best.b.x - best.a.x, best.b.y - best.a.y);
     if (total < 8) return;
@@ -6116,9 +6827,20 @@
     const mA = (fromA / PIXELS_PER_METER) * scale;
     const mB = ((total - fromA) / PIXELS_PER_METER) * scale;
 
-    // mierzymy od bliższego narożnika - tak jak przy taśmie
-    const nearA = fromA <= total - fromA;
-    wallHover = { pt: best.pt, corner: nearA ? best.a : best.b, dist: nearA ? mA : mB, other: nearA ? mB : mA };
+    // Punkt odniesienia ustalamy RAZ, przy wejsciu na ten odcinek: bierzemy
+    // naroznik, od ktorego zaczales. Dopoki nie zejdziesz ze sciany, liczba
+    // rosnie od niego az do drugiego konca i nigdzie nie przeskakuje.
+    if (!wallHoverAnchor || wallHoverAnchor.key !== best.key) {
+      wallHoverAnchor = { key: best.key, odA: fromA <= total - fromA };
+    }
+    const odA = wallHoverAnchor.odA;
+    wallHover = {
+      pt: best.pt,
+      corner: odA ? best.a : best.b,
+      dist: odA ? mA : mB,
+      other: odA ? mB : mA,
+      calosc: (total / PIXELS_PER_METER) * scale
+    };
   }
 
   function drawScene() {
@@ -6306,6 +7028,8 @@
     }
 
     if (warstwaWidoczna('proste')) drawProste();
+    drawPrzegrody();
+    drawPunkty();
     if (drawing && currentMode === 'prosta' && startPos && currentPos) {
       ctx.save();
       ctx.strokeStyle = kolorHex(defaultLineColor, KOLOR_LINII_DOMYSLNY);
@@ -6568,6 +7292,20 @@
       const closest = getClosestPointOnSegment(pos, {x: line.x1, y: line.y1}, {x: line.x2, y: line.y2}); const dSeg = Math.hypot(pos.x - closest.x, pos.y - closest.y);
       if (dSeg < minDistance) { minDistance = dSeg; bestPoint = closest; snapType='line'; snappedLine = line; }
     }
+    // lica grubych scian - narozniki lic maja pierwszenstwo przed samym licem,
+    // tak jak wezly przed sciana
+    if (typeof wszystkieLica === 'function') {
+      for (const f of wszystkieLica()) {
+        if (ignoreNode && f.zrodlo === ignoreNode.line) continue;
+        for (const p of [{x:f.x1,y:f.y1},{x:f.x2,y:f.y2}]) {
+          const d = Math.hypot(pos.x - p.x, pos.y - p.y);
+          if (d < minDistance) { minDistance = d; bestPoint = {x:p.x, y:p.y}; snapType='node'; snappedLine = f.zrodlo; }
+        }
+        const c = getClosestPointOnSegment(pos, {x:f.x1,y:f.y1}, {x:f.x2,y:f.y2});
+        const d2 = Math.hypot(pos.x - c.x, pos.y - c.y);
+        if (d2 < minDistance) { minDistance = d2; bestPoint = c; snapType='line'; snappedLine = f.zrodlo; }
+      }
+    }
     return { pt: bestPoint || pos, line: snappedLine, type: snapType }; 
   }
 
@@ -6706,6 +7444,7 @@
   }
 
   function recalculateRooms() {
+    if (typeof przeliczStrony === 'function') przeliczStrony();
       if(!objects.rooms) return;
       if(!objects.customDims) objects.customDims = {};
       objects._realLen = {};
@@ -7409,6 +8148,8 @@
         if (roomHit !== -1) { objects.rooms.splice(roomHit, 1); renderTablesPerSketch(); saveStateToHistory(); renderCanvas(); return; }
         let noteHit = findNoteAt(rawPos);
         if (noteHit !== -1) { objects.noteLines.splice(noteHit, 1); saveStateToHistory(); renderCanvas(); return; }
+        let punktHit = findPunktAt(rawPos);
+        if (punktHit !== -1) { objects.punkty.splice(punktHit, 1); saveStateToHistory(); renderCanvas(); return; }
         let prostaHit = findProstaAt(rawPos);
         if (prostaHit !== -1) { objects.proste.splice(prostaHit, 1); saveStateToHistory(); renderCanvas(); return; }
         if(clickedLineIndex !== -1) { objects.lines.splice(clickedLineIndex, 1); recalculateRooms(); renderTablesPerSketch(); saveStateToHistory(); } else {
@@ -7430,6 +8171,20 @@
     }
 
     if (currentMode === 'hatch') { handleHatchClick(rawPos); return; }
+
+    if (currentMode === 'punkt') {
+      const istniejacy = findPunktAt(rawPos);
+      if (istniejacy !== -1) { openPunktDialog(objects.punkty[istniejacy].baza, null, istniejacy); return; }
+      const baza = najblizszyPunktOdniesienia(rawPos);
+      if (!baza) {
+        alert('Kliknij blisko punktu, od którego chcesz mierzyć — narożnika ściany, krawędzi okna albo wcześniej postawionego punktu.');
+        return;
+      }
+      const li = (typeof hostLineIndex === 'function')
+        ? hostLineIndex({ x: baza.x, y: baza.y, width: 0 }) : -1;
+      openPunktDialog(baza, li !== -1 ? objects.lines[li] : null);
+      return;
+    }
 
     if (currentMode === 'prosta') {
       drawing = true; startPos = { x: rawPos.x, y: rawPos.y }; currentPos = { x: rawPos.x, y: rawPos.y };
@@ -7716,12 +8471,61 @@
 
   viewport.addEventListener('touchend', function(e) { if (e.touches.length < 2) initialPinchDistance = null; });
   
+  function fullscreenOn() {
+    const w = document.getElementById('fullscreenWrapper');
+    return !!(w && w.classList.contains('fullscreen-mode'));
+  }
+
   function toggleFullscreen() {
-    const wrapper = document.getElementById('fullscreenWrapper'); wrapper.classList.toggle('fullscreen-mode');
-    document.getElementById('btnFullscreen').innerText = wrapper.classList.contains('fullscreen-mode') ? '✖ Zamknij pełny ekran' : '⛶ Pełny ekran';
-    document.body.style.overflow = wrapper.classList.contains('fullscreen-mode') ? 'hidden' : 'auto';
+    const wrapper = document.getElementById('fullscreenWrapper');
+    wrapper.classList.toggle('fullscreen-mode');
+    const on = wrapper.classList.contains('fullscreen-mode');
+    document.body.classList.toggle('fs-active', on);
+    document.body.style.overflow = on ? 'hidden' : 'auto';
+    const b = document.getElementById('btnFullscreen');
+    if (b) b.innerText = on ? '✖ Zamknij' : '⛶ Pełny ekran';
+    // wchodzac w pelny ekran chowamy panel - o to chodzi, zeby plotno bylo cale
+    setFsPanel(false);
+    // Przegladarka na tablecie chowa paski systemowe dopiero po requestFullscreen.
+    // Gdy odmowi (brak gestu, iOS), zostajemy przy trybie na cale okno - dziala
+    // tak samo, tylko z paskiem adresu na gorze.
+    try {
+      if (on && document.documentElement.requestFullscreen && !document.fullscreenElement) {
+        const r = document.documentElement.requestFullscreen();
+        if (r && r.catch) r.catch(() => {});
+      } else if (!on && document.exitFullscreen && document.fullscreenElement) {
+        const r = document.exitFullscreen();
+        if (r && r.catch) r.catch(() => {});
+      }
+    } catch (e) {}
     setTimeout(() => { resetView(); renderCanvas(); }, 150);
   }
+
+  // Wysuwany panel z narzedziami. W pelnym ekranie pasek narzedzi przenosi sie
+  // do niego w CALOSCI - nie duplikujemy przyciskow, zeby nie bylo dwoch
+  // przelacznikow tego samego, ktore moglyby pokazywac cos innego.
+  let fsPanelOn = false;
+  function setFsPanel(on) {
+    fsPanelOn = !!on;
+    const panel = document.getElementById('fsPanel');
+    const przycisk = document.getElementById('fsPanelBtn');
+    if (panel) panel.classList.toggle('open', fsPanelOn);
+    if (przycisk) przycisk.innerText = fsPanelOn ? '✖' : '☰';
+    const pasek = document.getElementById('toolbarBox');
+    const gniazdo = fsPanelOn ? document.getElementById('fsPanelBody')
+                              : document.getElementById('toolbarHome');
+    if (pasek && gniazdo && pasek.parentNode !== gniazdo) gniazdo.appendChild(pasek);
+    setTimeout(() => renderCanvas(), 60);
+  }
+
+  function toggleFsPanel() { setFsPanel(!fsPanelOn); }
+
+  // Wyjscie z trybu pelnoekranowego przegladarki (klawisz Esc, gest cofania)
+  // musi zamknac takze nasz tryb - inaczej uzytkownik zostaje z plotnem
+  // na caly ekran i bez zadnego przycisku wyjscia.
+  document.addEventListener('fullscreenchange', () => {
+    if (!document.fullscreenElement && fullscreenOn()) toggleFullscreen();
+  });
 
   function closeLabelDialog() {
     document.getElementById('labelOverlay').style.display = 'none';
@@ -7936,7 +8740,7 @@
   }
 
   canvas.addEventListener('pointerdown', startDraw); canvas.addEventListener('pointermove', draw); canvas.addEventListener('pointerup', stopDraw);
-  canvas.addEventListener('pointerleave', () => { if (wallHover) { wallHover = null; renderCanvas(); } });
+  canvas.addEventListener('pointerleave', () => { wallHoverAnchor = null; if (wallHover) { wallHover = null; renderCanvas(); } });
   canvas.addEventListener('pointercancel', stopDraw); canvas.addEventListener('pointerout', stopDraw); canvas.addEventListener('touchstart', (e) => e.preventDefault(), {passive: false});
 
 

@@ -46,8 +46,8 @@ MUTACJE = [
 
     ('pomiary trafiaja po dopasowaniu na sasiednia sciane',
      'tests/test-skala.js',
-     "      const line = objects.lines[k.lineIndex];",
-     "      const line = objects.lines[(k.lineIndex + 1) % objects.lines.length];"),
+     "      const line = objects.lines[k.lineIndex];\n      if (!line) { nowe[k.key] = k.data; return; }",
+     "      const line = objects.lines[(k.lineIndex + 1) % objects.lines.length];\n      if (!line) { nowe[k.key] = k.data; return; }"),
 
     ('sciany przestaja byc prostowane po dopasowaniu',
      'tests/test-skala.js',
@@ -438,6 +438,111 @@ MUTACJE = [
      'tests/test-otwory.js',
      "      if (!op.odKrawedzi) return;\n      const li = hostLineIndex(op);",
      "      return;\n      const li = hostLineIndex(op);"),
+
+    ('odczyt znow przeskakuje na blizszy naroznik',
+     'tests/test-teren.js',
+     "    if (!wallHoverAnchor || wallHoverAnchor.key !== best.key) {\n      wallHoverAnchor = { key: best.key, odA: fromA <= total - fromA };\n    }",
+     "    wallHoverAnchor = { key: best.key, odA: fromA <= total - fromA };"),
+
+    ('kotwica naroznika nie zmienia sie przy przejsciu na inna sciane',
+     'tests/test-teren.js',
+     "wallHoverAnchor.key !== best.key",
+     "false"),
+
+    ('dalmierz w trybie sumowania i tak wpisuje pierwszy pomiar',
+     'tests/test-teren.js',
+     "    if (distoSumaOn) {\n      // w trybie sumowania odczyt tylko dokladamy do listy",
+     "    if (false) {\n      // w trybie sumowania odczyt tylko dokladamy do listy"),
+
+    ('zatwierdzenie sumy nie zeruje skladnikow',
+     'tests/test-teren.js',
+     "    distoSkladniki = [];\n    renderDistoSuma();\n    // sume wpisujemy",
+     "    renderDistoSuma();\n    // sume wpisujemy"),
+
+    ('pusta suma jest wpisywana jako zero',
+     'tests/test-teren.js',
+     "    if (suma <= 0) { alert('Nie ma jeszcze czego zatwierdzać — zmierz przynajmniej jeden odcinek.'); return; }",
+     "    if (false) { return; }"),
+
+    ('cofniecie kasuje cala sume zamiast ostatniego pomiaru',
+     'tests/test-teren.js',
+     "  function distoCofnijPomiar() { distoSkladniki.pop(); renderDistoSuma(); }",
+     "  function distoCofnijPomiar() { distoSkladniki = []; renderDistoSuma(); }"),
+
+    ('pelny ekran nie chowa reszty strony',
+     'tests/test-teren.js',
+     "    document.body.classList.toggle('fs-active', on);",
+     "    document.body.classList.toggle('fs-active', false);"),
+
+    ('panel narzedzi startuje otwarty i zaslania plotno',
+     'tests/test-teren.js',
+     "    // wchodzac w pelny ekran chowamy panel - o to chodzi, zeby plotno bylo cale\n    setFsPanel(false);",
+     "    setFsPanel(true);"),
+
+    ('pasek narzedzi nie wraca po zamknieciu panelu',
+     'tests/test-teren.js',
+     "    if (pasek && gniazdo && pasek.parentNode !== gniazdo) gniazdo.appendChild(pasek);",
+     "    if (pasek && gniazdo && fsPanelOn && pasek.parentNode !== gniazdo) gniazdo.appendChild(pasek);"),
+
+    ('przyciaganie nie widzi lic grubych scian',
+     'tests/test-mury.js',
+     "    if (typeof wszystkieLica === 'function') {",
+     "    if (false) {"),
+
+    ('lico odsuniete o polowe grubosci zamiast o cala',
+     'tests/test-mury.js',
+     "    const lica = [srodek - gr / 2, srodek + gr / 2];",
+     "    const lica = [srodek - gr / 4, srodek + gr / 4];"),
+
+    ('mur rosnie do srodka pomieszczenia',
+     'tests/test-mury.js',
+     "      if (info.rodzaj === 'zewnetrzna') nowa = info.wnetrzePlus ? 'lewa' : 'prawa';",
+     "      if (info.rodzaj === 'zewnetrzna') nowa = info.wnetrzePlus ? 'prawa' : 'lewa';"),
+
+    ('sciana wewnetrzna traktowana jak zewnetrzna',
+     'tests/test-mury.js',
+     "    if (plus && minus) return { rodzaj: 'wewnetrzna', wnetrzePlus: true };",
+     "    if (plus && minus) return { rodzaj: 'zewnetrzna', wnetrzePlus: true };"),
+
+    ('reczny wybor strony jest nadpisywany przez tryb auto',
+     'tests/test-mury.js',
+     "      if (line.strRecznie) return;",
+     "      if (false) return;"),
+
+    ('punkt odniesienia liczony bez uwzglednienia odleglosci',
+     'tests/test-mury.js',
+     "    const d = (parseFloat(dystCm) || 0) / 100 * PIXELS_PER_METER;",
+     "    const d = 0;"),
+
+    ('punkt wzdluz sciany idzie w zla strone',
+     'tests/test-mury.js',
+     "      const cel = (doA <= doB) ? { x: line.x2, y: line.y2 } : { x: line.x1, y: line.y1 };",
+     "      const cel = (doA <= doB) ? { x: line.x1, y: line.y1 } : { x: line.x2, y: line.y2 };"),
+
+    ('krawedzie otworow nie sa punktami odniesienia',
+     'tests/test-mury.js',
+     "      lista.push({ x: op.x - ux * w / 2, y: op.y - uy * w / 2, opis: 'krawędź ' + op.id });",
+     "      // bez krawedzi"),
+
+    ('pusta odleglosc tworzy punkt w miejscu bazy',
+     'tests/test-mury.js',
+     "    if (!isFinite(dyst) || dyst < 0) { alert('Podaj odległość w centymetrach, np. 215'); return; }",
+     "    if (false) { return; }"),
+
+    ('zestawienie przegrod nie grupuje scian',
+     'tests/test-mury.js',
+     "      mapa[k].ile++;\n      mapa[k].dlugosc += Math.hypot(l.x2 - l.x1, l.y2 - l.y1) / PIXELS_PER_METER;",
+     "      mapa[k].ile = 1;\n      mapa[k].dlugosc += Math.hypot(l.x2 - l.x1, l.y2 - l.y1) / PIXELS_PER_METER;"),
+
+    ('numeracja przegrod zawsze zaczyna od jedynki',
+     'tests/test-mury.js',
+     "      if (m) max = Math.max(max, parseInt(m[1], 10));",
+     "      if (false) max = 0;"),
+
+    ('oznaczenie przegrody nie zapisuje sie przy scianie',
+     'tests/test-mury.js',
+     "      if (przegroda) l.przegroda = przegroda; else delete l.przegroda;",
+     "      // bez zapisu"),
 
     ('limit dlugosci sciany 30 m podmieniony na 3 m',
      'tests/test-kontrola.js',

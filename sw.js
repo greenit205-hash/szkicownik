@@ -2,7 +2,7 @@
 // UWAGA: po KAŻDEJ zmianie w index.html podbij numer w CACHE_NAME.
 // Bez tego urządzenia zostaną na starej wersji i będziesz szukał błędu,
 // którego dawno nie ma w kodzie.
-const CACHE_NAME = 'szkicownik-v10';
+const CACHE_NAME = 'szkicownik-v12';
 
 const PLIKI = [
   './',
